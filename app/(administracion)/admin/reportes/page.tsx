@@ -6,9 +6,15 @@ type SearchParams = Promise<{
   genero?: string;
   iglesia?: string;
   estado?: string;
+  estadoPago?: string;
   edadMin?: string;
   edadMax?: string;
 }>;
+
+type EstadoPago =
+  | "COMPLETO"
+  | "PENDIENTE"
+  | "SIN_INSCRIPCION";
 
 function calcularEdad(fechaNacimiento: string | null) {
   if (!fechaNacimiento) {
@@ -38,6 +44,30 @@ function calcularEdad(fechaNacimiento: string | null) {
   return edad;
 }
 
+function obtenerRelacion<T>(
+  relacion: T | T[] | null
+): T | null {
+  if (!relacion) {
+    return null;
+  }
+
+  if (Array.isArray(relacion)) {
+    return relacion[0] || null;
+  }
+
+  return relacion;
+}
+
+function formatearMoneda(valor: number) {
+  return `L ${Number(valor || 0).toLocaleString(
+    "es-HN",
+    {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }
+  )}`;
+}
+
 export default async function ReportesPage({
   searchParams,
 }: {
@@ -51,6 +81,7 @@ export default async function ReportesPage({
   const genero = params.genero || "";
   const iglesia = params.iglesia || "";
   const estado = params.estado || "";
+  const estadoPago = params.estadoPago || "";
 
   const edadMin = params.edadMin
     ? Number(params.edadMin)
@@ -61,7 +92,7 @@ export default async function ReportesPage({
     : null;
 
   /*
-   * Cargar iglesias para el filtro.
+   * CARGAR IGLESIAS
    */
   const { data: iglesias } = await supabase
     .from("iglesias")
@@ -73,7 +104,12 @@ export default async function ReportesPage({
     .order("nombre");
 
   /*
-   * Cargar campistas.
+   * CARGAR CAMPISTAS
+   *
+   * Ahora también traemos:
+   * - inscripciones
+   * - campamento
+   * - aportes
    */
   let query = supabase
     .from("campistas")
@@ -89,10 +125,30 @@ export default async function ReportesPage({
       iglesias (
         id,
         nombre
+      ),
+      inscripciones (
+        id,
+        meta,
+        estado,
+        fecha_inscripcion,
+        campamento_id,
+        campamentos (
+          id,
+          nombre
+        ),
+        aportes (
+          id,
+          monto,
+          estado
+        )
       )
     `)
     .order("nombre");
 
+  /*
+   * FILTROS QUE PUEDEN HACERSE
+   * DIRECTAMENTE EN SUPABASE.
+   */
   if (genero) {
     query = query.eq("genero", genero);
   }
@@ -110,15 +166,135 @@ export default async function ReportesPage({
 
   const { data, error } = await query;
 
-  let campistas = data || [];
+  /*
+   * PROCESAR CAMPISTAS
+   */
+  let resultados = (data || []).map(
+    (campista: any) => {
+      const inscripciones = Array.isArray(
+        campista.inscripciones
+      )
+        ? campista.inscripciones
+        : [];
+
+      /*
+       * Ordenamos de la inscripción más nueva
+       * a la más antigua.
+       */
+      const inscripcionesOrdenadas = [
+        ...inscripciones,
+      ].sort((a, b) => {
+        const fechaA = new Date(
+          a.fecha_inscripcion || 0
+        ).getTime();
+
+        const fechaB = new Date(
+          b.fecha_inscripcion || 0
+        ).getTime();
+
+        return fechaB - fechaA;
+      });
+
+      /*
+       * Tomamos la inscripción actual:
+       * la más reciente que no esté cancelada.
+       */
+      const inscripcionActual =
+        inscripcionesOrdenadas.find(
+          (inscripcion) =>
+            inscripcion.estado !== "CANCELADO"
+        ) || null;
+
+      const edad = calcularEdad(
+        campista.fecha_nacimiento
+      );
+
+      /*
+       * SIN INSCRIPCIÓN
+       */
+      if (!inscripcionActual) {
+        return {
+          ...campista,
+          edad,
+          campamento: null,
+          meta: 0,
+          total_ahorrado: 0,
+          falta_por_pagar: 0,
+          estado_pago:
+            "SIN_INSCRIPCION" as EstadoPago,
+        };
+      }
+
+      /*
+       * APORTES ACTIVOS
+       */
+      const aportes = Array.isArray(
+        inscripcionActual.aportes
+      )
+        ? inscripcionActual.aportes
+        : [];
+
+      const totalAhorrado = aportes
+        .filter(
+          (aporte: any) =>
+            aporte.estado === "ACTIVO"
+        )
+        .reduce(
+          (
+            total: number,
+            aporte: any
+          ) =>
+            total +
+            Number(aporte.monto || 0),
+          0
+        );
+
+      const meta = Number(
+        inscripcionActual.meta || 0
+      );
+
+      const faltaPorPagar = Math.max(
+        meta - totalAhorrado,
+        0
+      );
+
+      const estadoPago: EstadoPago =
+        meta > 0 &&
+        totalAhorrado >= meta
+          ? "COMPLETO"
+          : "PENDIENTE";
+
+      const campamentoRelacion =
+        obtenerRelacion(
+          inscripcionActual.campamentos
+        ) as {
+          id: number;
+          nombre: string;
+        } | null;
+
+      return {
+        ...campista,
+        edad,
+        campamento:
+          campamentoRelacion?.nombre ||
+          null,
+        meta,
+        total_ahorrado: totalAhorrado,
+        falta_por_pagar:
+          faltaPorPagar,
+        estado_pago: estadoPago,
+      };
+    }
+  );
 
   /*
-   * Filtro por nombre o identidad.
+   * FILTRO POR NOMBRE O IDENTIDAD
    */
   if (buscar) {
-    const valor = buscar.toLowerCase();
+    const valor =
+      buscar.toLowerCase();
 
-    campistas = campistas.filter(
+    resultados = resultados.filter(
       (campista) =>
         campista.nombre
           ?.toLowerCase()
@@ -130,16 +306,10 @@ export default async function ReportesPage({
   }
 
   /*
-   * Calcular edad y aplicar filtros.
+   * FILTROS POR EDAD
    */
-  const resultados = campistas
-    .map((campista) => ({
-      ...campista,
-      edad: calcularEdad(
-        campista.fecha_nacimiento
-      ),
-    }))
-    .filter((campista) => {
+  resultados = resultados.filter(
+    (campista) => {
       if (
         edadMin !== null &&
         (
@@ -161,10 +331,22 @@ export default async function ReportesPage({
       }
 
       return true;
-    });
+    }
+  );
 
   /*
-   * Resumen.
+   * FILTRO POR ESTADO DE PAGO
+   */
+  if (estadoPago) {
+    resultados = resultados.filter(
+      (campista) =>
+        campista.estado_pago ===
+        estadoPago
+    );
+  }
+
+  /*
+   * RESUMEN
    */
   const total = resultados.length;
 
@@ -178,44 +360,67 @@ export default async function ReportesPage({
       campista.genero === "FEMENINO"
   ).length;
 
-  const edadesValidas = resultados
-    .map((campista) => campista.edad)
-    .filter(
-      (edad): edad is number =>
-        edad !== null
-    );
+  const completos = resultados.filter(
+    (campista) =>
+      campista.estado_pago ===
+      "COMPLETO"
+  ).length;
 
-  const edadPromedio =
-    edadesValidas.length > 0
-      ? Math.round(
-          edadesValidas.reduce(
-            (totalEdad, edad) =>
-              totalEdad + edad,
-            0
-          ) / edadesValidas.length
-        )
-      : 0;
+  const pendientes = resultados.filter(
+    (campista) =>
+      campista.estado_pago ===
+      "PENDIENTE"
+  ).length;
+
+  const sinInscripcion =
+    resultados.filter(
+      (campista) =>
+        campista.estado_pago ===
+        "SIN_INSCRIPCION"
+    ).length;
 
   /*
-   * Construir URL del PDF
-   * con los mismos filtros actuales.
+   * CONSTRUIR URL DEL PDF
+   *
+   * MUY IMPORTANTE:
+   * TODOS los filtros actuales se envían.
    */
-  const pdfParams = new URLSearchParams();
+  const pdfParams =
+    new URLSearchParams();
 
   if (buscar) {
-    pdfParams.set("buscar", buscar);
+    pdfParams.set(
+      "buscar",
+      buscar
+    );
   }
 
   if (genero) {
-    pdfParams.set("genero", genero);
+    pdfParams.set(
+      "genero",
+      genero
+    );
   }
 
   if (iglesia) {
-    pdfParams.set("iglesia", iglesia);
+    pdfParams.set(
+      "iglesia",
+      iglesia
+    );
   }
 
   if (estado) {
-    pdfParams.set("estado", estado);
+    pdfParams.set(
+      "estado",
+      estado
+    );
+  }
+
+  if (estadoPago) {
+    pdfParams.set(
+      "estadoPago",
+      estadoPago
+    );
   }
 
   if (params.edadMin) {
@@ -257,7 +462,6 @@ export default async function ReportesPage({
 
       {/* RESUMEN */}
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* TOTAL */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-medium text-slate-500">
             Campistas
@@ -268,36 +472,33 @@ export default async function ReportesPage({
           </p>
         </div>
 
-        {/* MASCULINO */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">
-            Masculino
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+          <p className="text-sm font-medium text-emerald-700">
+            Pagaron completo
           </p>
 
-          <p className="mt-2 text-3xl font-bold text-slate-900">
-            {hombres}
-          </p>
-        </div>
-
-        {/* FEMENINO */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">
-            Femenino
-          </p>
-
-          <p className="mt-2 text-3xl font-bold text-slate-900">
-            {mujeres}
+          <p className="mt-2 text-3xl font-bold text-emerald-800">
+            {completos}
           </p>
         </div>
 
-        {/* EDAD PROMEDIO */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">
-            Edad promedio
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+          <p className="text-sm font-medium text-amber-700">
+            Pendientes
           </p>
 
-          <p className="mt-2 text-3xl font-bold text-slate-900">
-            {edadPromedio}
+          <p className="mt-2 text-3xl font-bold text-amber-800">
+            {pendientes}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+          <p className="text-sm font-medium text-slate-600">
+            Sin inscripción
+          </p>
+
+          <p className="mt-2 text-3xl font-bold text-slate-800">
+            {sinInscripcion}
           </p>
         </div>
       </div>
@@ -389,6 +590,68 @@ export default async function ReportesPage({
             </select>
           </div>
 
+          {/* ESTADO CAMPISTA */}
+          <div>
+            <label
+              htmlFor="estado"
+              className="mb-2 block text-sm font-semibold text-slate-700"
+            >
+              Estado del campista
+            </label>
+
+            <select
+              id="estado"
+              name="estado"
+              defaultValue={estado}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            >
+              <option value="">
+                Todos
+              </option>
+
+              <option value="ACTIVO">
+                Activo
+              </option>
+
+              <option value="INACTIVO">
+                Inactivo
+              </option>
+            </select>
+          </div>
+
+          {/* ESTADO DE PAGO */}
+          <div>
+            <label
+              htmlFor="estadoPago"
+              className="mb-2 block text-sm font-semibold text-slate-700"
+            >
+              Estado de pago
+            </label>
+
+            <select
+              id="estadoPago"
+              name="estadoPago"
+              defaultValue={estadoPago}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            >
+              <option value="">
+                Todos
+              </option>
+
+              <option value="PENDIENTE">
+                Pendientes
+              </option>
+
+              <option value="COMPLETO">
+                Pagaron completo
+              </option>
+
+              <option value="SIN_INSCRIPCION">
+                Sin inscripción
+              </option>
+            </select>
+          </div>
+
           {/* EDAD MIN */}
           <div>
             <label
@@ -433,35 +696,6 @@ export default async function ReportesPage({
               placeholder="Ej. 30"
               className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
             />
-          </div>
-
-          {/* ESTADO */}
-          <div>
-            <label
-              htmlFor="estado"
-              className="mb-2 block text-sm font-semibold text-slate-700"
-            >
-              Estado
-            </label>
-
-            <select
-              id="estado"
-              name="estado"
-              defaultValue={estado}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            >
-              <option value="">
-                Todos
-              </option>
-
-              <option value="ACTIVO">
-                Activo
-              </option>
-
-              <option value="INACTIVO">
-                Inactivo
-              </option>
-            </select>
           </div>
 
           {/* BOTONES */}
@@ -531,19 +765,7 @@ export default async function ReportesPage({
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
-                    Identidad
-                  </th>
-
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
-                    Nombre
-                  </th>
-
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
-                    Edad
-                  </th>
-
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
-                    Género
+                    Campista
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
@@ -551,7 +773,19 @@ export default async function ReportesPage({
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
-                    Estado
+                    Campamento
+                  </th>
+
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                    Estado pago
+                  </th>
+
+                  <th className="px-5 py-3 text-right text-xs font-semibold uppercase text-slate-500">
+                    Ahorrado
+                  </th>
+
+                  <th className="px-5 py-3 text-right text-xs font-semibold uppercase text-slate-500">
+                    Falta por pagar
                   </th>
                 </tr>
               </thead>
@@ -560,32 +794,26 @@ export default async function ReportesPage({
                 {resultados.map(
                   (campista) => {
                     const iglesiaRelacion =
-                      Array.isArray(
+                      obtenerRelacion(
                         campista.iglesias
-                      )
-                        ? campista
-                            .iglesias[0]
-                        : campista.iglesias;
+                      ) as {
+                        id: number;
+                        nombre: string;
+                      } | null;
 
                     return (
                       <tr
                         key={campista.id}
                         className="hover:bg-slate-50"
                       >
-                        <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600">
-                          {campista.identidad}
-                        </td>
+                        <td className="px-5 py-4">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {campista.nombre}
+                          </p>
 
-                        <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                          {campista.nombre}
-                        </td>
-
-                        <td className="px-5 py-4 text-sm text-slate-600">
-                          {campista.edad ?? "—"}
-                        </td>
-
-                        <td className="px-5 py-4 text-sm text-slate-600">
-                          {campista.genero || "—"}
+                          <p className="mt-1 text-xs text-slate-400">
+                            {campista.identidad}
+                          </p>
                         </td>
 
                         <td className="px-5 py-4 text-sm text-slate-600">
@@ -593,17 +821,56 @@ export default async function ReportesPage({
                             "—"}
                         </td>
 
+                        <td className="px-5 py-4 text-sm text-slate-600">
+                          {campista.campamento ||
+                            "—"}
+                        </td>
+
                         <td className="px-5 py-4">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                              campista.estado ===
-                              "ACTIVO"
-                                ? "bg-emerald-50 text-emerald-700"
-                                : "bg-slate-100 text-slate-600"
-                            }`}
-                          >
-                            {campista.estado}
-                          </span>
+                          {campista.estado_pago ===
+                          "COMPLETO" ? (
+                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                              Pagado completo
+                            </span>
+                          ) : campista.estado_pago ===
+                            "PENDIENTE" ? (
+                            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                              Pendiente
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                              Sin inscripción
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="whitespace-nowrap px-5 py-4 text-right text-sm font-semibold text-slate-700">
+                          {campista.estado_pago ===
+                          "SIN_INSCRIPCION"
+                            ? "—"
+                            : formatearMoneda(
+                                campista.total_ahorrado
+                              )}
+                        </td>
+
+                        <td className="whitespace-nowrap px-5 py-4 text-right">
+                          {campista.estado_pago ===
+                          "SIN_INSCRIPCION" ? (
+                            <span className="text-slate-400">
+                              —
+                            </span>
+                          ) : campista.estado_pago ===
+                            "COMPLETO" ? (
+                            <span className="font-semibold text-emerald-700">
+                              L 0.00
+                            </span>
+                          ) : (
+                            <span className="font-semibold text-amber-700">
+                              {formatearMoneda(
+                                campista.falta_por_pagar
+                              )}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -613,6 +880,19 @@ export default async function ReportesPage({
             </table>
           </div>
         )}
+      </div>
+
+      {/* RESUMEN DEMOGRÁFICO PEQUEÑO */}
+      <div className="mt-6 text-sm text-slate-500">
+        Masculino:{" "}
+        <span className="font-semibold text-slate-700">
+          {hombres}
+        </span>
+        {" · "}
+        Femenino:{" "}
+        <span className="font-semibold text-slate-700">
+          {mujeres}
+        </span>
       </div>
     </>
   );

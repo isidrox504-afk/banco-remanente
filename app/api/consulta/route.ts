@@ -7,100 +7,219 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
-    const identidad = body.identidad?.trim();
+    const codigoCampista = body.codigo_campista
+      ?.trim()
+      .toUpperCase();
+
     const pin = body.pin?.trim();
 
-    if (!identidad || !pin) {
+    // ============================================================
+    // VALIDACIONES
+    // ============================================================
+
+    if (!codigoCampista || !pin) {
       return NextResponse.json(
-        { error: "Identidad y PIN son obligatorios." },
-        { status: 400 }
+        {
+          error:
+            "El código de campista y el PIN son obligatorios.",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
-    // Buscar campista
-    const { data: campista, error: errorCampista } = await supabase
+    if (!/^\d{6}$/.test(pin)) {
+      return NextResponse.json(
+        {
+          error:
+            "El PIN debe contener 6 dígitos.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // ============================================================
+    // BUSCAR CAMPISTA
+    // ============================================================
+
+    const {
+      data: campista,
+      error: errorCampista,
+    } = await supabase
       .from("campistas")
       .select(`
         id,
         nombre,
-        identidad,
+        codigo_campista,
         pin_consulta,
         estado
       `)
-      .eq("identidad", identidad)
+      .eq(
+        "codigo_campista",
+        codigoCampista
+      )
       .maybeSingle();
 
     if (errorCampista) {
+      console.error(
+        "Error buscando campista:",
+        errorCampista
+      );
+
       return NextResponse.json(
-        { error: "No se pudo realizar la consulta." },
-        { status: 500 }
+        {
+          error:
+            "No se pudo realizar la consulta.",
+        },
+        {
+          status: 500,
+        }
       );
     }
+
+    // ============================================================
+    // CAMPISTA NO ENCONTRADO
+    // ============================================================
 
     if (!campista) {
       return NextResponse.json(
-        { error: "Identidad o PIN incorrectos." },
-        { status: 401 }
+        {
+          error:
+            "Código de campista o PIN incorrectos.",
+        },
+        {
+          status: 401,
+        }
       );
     }
 
-    if (campista.estado !== "ACTIVO") {
+    // ============================================================
+    // VALIDAR ESTADO
+    // ============================================================
+
+    if (
+      campista.estado !==
+      "ACTIVO"
+    ) {
       return NextResponse.json(
-        { error: "Este campista no se encuentra activo." },
-        { status: 403 }
+        {
+          error:
+            "Este campista no se encuentra activo.",
+        },
+        {
+          status: 403,
+        }
       );
     }
 
-    if (campista.pin_consulta !== pin) {
+    // ============================================================
+    // VALIDAR PIN
+    // ============================================================
+
+    if (
+      String(
+        campista.pin_consulta
+      ) !== pin
+    ) {
       return NextResponse.json(
-        { error: "Identidad o PIN incorrectos." },
-        { status: 401 }
+        {
+          error:
+            "Código de campista o PIN incorrectos.",
+        },
+        {
+          status: 401,
+        }
       );
     }
 
-    // Obtener inscripción más reciente
-    const { data: inscripcion, error: errorInscripcion } =
-      await supabase
-        .from("inscripciones")
-        .select(`
+    // ============================================================
+    // OBTENER INSCRIPCIÓN MÁS RECIENTE
+    // ============================================================
+
+    const {
+      data: inscripcion,
+      error: errorInscripcion,
+    } = await supabase
+      .from("inscripciones")
+      .select(`
+        id,
+        meta,
+        estado,
+        fecha_inscripcion,
+        campamentos (
           id,
-          meta,
-          estado,
-          fecha_inscripcion,
-          campamentos (
-            id,
-            nombre,
-            precio_inscripcion,
-            fecha_inicio,
-            fecha_limite_pago,
-            estado
-          )
-        `)
-        .eq("campista_id", campista.id)
-        .neq("estado", "CANCELADO")
-        .order("fecha_inscripcion", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+          nombre,
+          precio_inscripcion,
+          fecha_inicio,
+          fecha_limite_pago,
+          estado
+        )
+      `)
+      .eq(
+        "campista_id",
+        campista.id
+      )
+      .neq(
+        "estado",
+        "CANCELADO"
+      )
+      .order(
+        "fecha_inscripcion",
+        {
+          ascending: false,
+        }
+      )
+      .limit(1)
+      .maybeSingle();
 
     if (errorInscripcion) {
+      console.error(
+        "Error obteniendo inscripción:",
+        errorInscripcion
+      );
+
       return NextResponse.json(
-        { error: "No se pudo obtener la inscripción." },
-        { status: 500 }
+        {
+          error:
+            "No se pudo obtener la inscripción.",
+        },
+        {
+          status: 500,
+        }
       );
     }
+
+    // ============================================================
+    // SIN INSCRIPCIÓN
+    // ============================================================
 
     if (!inscripcion) {
       return NextResponse.json({
         campista: {
-          nombre: campista.nombre,
+          nombre:
+            campista.nombre,
+
+          codigo_campista:
+            campista.codigo_campista,
         },
+
         inscripcion: null,
+
         aportes: [],
       });
     }
 
-    // Obtener aportes
-    const { data: aportes, error: errorAportes } = await supabase
+    // ============================================================
+    // OBTENER APORTES ACTIVOS
+    // ============================================================
+
+    const {
+      data: aportes,
+      error: errorAportes,
+    } = await supabase
       .from("aportes")
       .select(`
         id,
@@ -109,71 +228,154 @@ export async function POST(request: Request) {
         metodo_pago,
         referencia
       `)
-      .eq("inscripcion_id", inscripcion.id)
-      .eq("estado", "ACTIVO")
-      .order("fecha_aporte", { ascending: false });
+      .eq(
+        "inscripcion_id",
+        inscripcion.id
+      )
+      .eq(
+        "estado",
+        "ACTIVO"
+      )
+      .order(
+        "fecha_aporte",
+        {
+          ascending: false,
+        }
+      );
 
     if (errorAportes) {
+      console.error(
+        "Error obteniendo aportes:",
+        errorAportes
+      );
+
       return NextResponse.json(
-        { error: "No se pudieron obtener los aportes." },
-        { status: 500 }
+        {
+          error:
+            "No se pudieron obtener los aportes.",
+        },
+        {
+          status: 500,
+        }
       );
     }
 
+    // ============================================================
+    // CALCULAR AHORRO
+    // ============================================================
+
     const totalAhorrado =
       aportes?.reduce(
-        (total, aporte) => total + Number(aporte.monto),
+        (
+          total,
+          aporte
+        ) =>
+          total +
+          Number(
+            aporte.monto
+          ),
         0
       ) || 0;
 
-    const meta = Number(inscripcion.meta);
+    const meta =
+      Number(
+        inscripcion.meta
+      );
 
-    const pendiente = Math.max(meta - totalAhorrado, 0);
+    const pendiente =
+      Math.max(
+        meta -
+          totalAhorrado,
+        0
+      );
 
     const porcentaje =
       meta > 0
         ? Math.min(
-            Math.round((totalAhorrado / meta) * 100),
+            Math.round(
+              (totalAhorrado /
+                meta) *
+                100
+            ),
             100
           )
         : 0;
 
-    const relacionCampamento = inscripcion.campamentos;
+    // ============================================================
+    // NORMALIZAR RELACIÓN CAMPAMENTO
+    // ============================================================
 
-    const campamento = Array.isArray(relacionCampamento)
-      ? relacionCampamento[0]
-      : relacionCampamento;
+    const relacionCampamento =
+      inscripcion.campamentos;
+
+    const campamento =
+      Array.isArray(
+        relacionCampamento
+      )
+        ? relacionCampamento[0]
+        : relacionCampamento;
+
+    // ============================================================
+    // RESPUESTA
+    // ============================================================
 
     return NextResponse.json({
       campista: {
-        nombre: campista.nombre,
+        nombre:
+          campista.nombre,
+
+        codigo_campista:
+          campista.codigo_campista,
       },
 
       inscripcion: {
-        id: inscripcion.id,
+        id:
+          inscripcion.id,
+
         meta,
-        estado: inscripcion.estado,
 
-        campamento: campamento
-          ? {
-              nombre: campamento.nombre,
-              fecha_inicio: campamento.fecha_inicio,
-              fecha_limite_pago:
-                campamento.fecha_limite_pago,
-            }
-          : null,
+        estado:
+          inscripcion.estado,
 
-        total_ahorrado: totalAhorrado,
+        campamento:
+          campamento
+            ? {
+                nombre:
+                  campamento.nombre,
+
+                fecha_inicio:
+                  campamento.fecha_inicio,
+
+                fecha_limite_pago:
+                  campamento.fecha_limite_pago,
+              }
+            : null,
+
+        total_ahorrado:
+          totalAhorrado,
+
         pendiente,
+
         porcentaje,
       },
 
-      aportes: aportes || [],
+      aportes:
+        aportes || [],
     });
-  } catch {
+  } catch (error) {
+    console.error(
+      "Error general en consulta:",
+      error
+    );
+
     return NextResponse.json(
-      { error: "Ocurrió un error al consultar el ahorro." },
-      { status: 500 }
+      {
+        error:
+          "Ocurrió un error al consultar el ahorro.",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }

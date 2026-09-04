@@ -1,6 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useState,
+} from "react";
+
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
@@ -9,46 +14,192 @@ type Iglesia = {
   nombre: string;
 };
 
+type Campamento = {
+  id: number;
+  nombre: string;
+  precio_inscripcion: number | string;
+};
+
 export default function NuevoCampistaPage() {
+  // ============================================================
+  // DATOS PERSONALES
+  // ============================================================
+
   const [identidad, setIdentidad] = useState("");
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
-
   const [iglesiaId, setIglesiaId] = useState("");
   const [genero, setGenero] = useState("");
-  const [fechaNacimiento, setFechaNacimiento] = useState("");
+  const [fechaNacimiento, setFechaNacimiento] =
+    useState("");
 
-  const [iglesias, setIglesias] = useState<Iglesia[]>([]);
+  // ============================================================
+  // CATÁLOGOS
+  // ============================================================
+
+  const [iglesias, setIglesias] = useState<Iglesia[]>(
+    []
+  );
+
+  const [campamentos, setCampamentos] = useState<
+    Campamento[]
+  >([]);
+
+  const [cargandoCatalogos, setCargandoCatalogos] =
+    useState(true);
+
+  // ============================================================
+  // INSCRIPCIÓN OPCIONAL
+  // ============================================================
+
+  const [inscribirAhora, setInscribirAhora] =
+    useState(false);
+
+  const [campamentoId, setCampamentoId] = useState("");
+
+  const [meta, setMeta] = useState("");
+
+  // ============================================================
+  // ESTADO FORMULARIO
+  // ============================================================
 
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
-  const [cargandoIglesias, setCargandoIglesias] = useState(true);
+
+  // ============================================================
+  // RESULTADO REGISTRO
+  // ============================================================
+
+  const [campistaId, setCampistaId] = useState<
+    number | null
+  >(null);
 
   const [pinGenerado, setPinGenerado] = useState("");
-  const [campistaRegistrado, setCampistaRegistrado] = useState("");
+
+  const [codigoCampista, setCodigoCampista] =
+    useState("");
+
+  const [campistaRegistrado, setCampistaRegistrado] =
+    useState("");
+
+  const [inscripcionRealizada, setInscripcionRealizada] =
+    useState(false);
+
+  const [inscripcionSolicitada, setInscripcionSolicitada] =
+    useState(false);
+
+  const [errorInscripcion, setErrorInscripcion] =
+    useState("");
+
+  const [campamentoRegistrado, setCampamentoRegistrado] =
+    useState("");
+
+  const [metaRegistrada, setMetaRegistrada] =
+    useState(0);
+
+  // ============================================================
+  // CARGAR CATÁLOGOS
+  // ============================================================
 
   useEffect(() => {
-    async function cargarIglesias() {
+    async function cargarCatalogos() {
       const supabase = createClient();
 
-      const { data, error } = await supabase
-        .from("iglesias")
-        .select("id, nombre")
-        .eq("estado", "ACTIVO")
-        .order("nombre", { ascending: true });
+      try {
+        const [
+          resultadoIglesias,
+          resultadoCampamentos,
+        ] = await Promise.all([
+          supabase
+            .from("iglesias")
+            .select("id, nombre")
+            .eq("estado", "ACTIVO")
+            .order("nombre", {
+              ascending: true,
+            }),
 
-      if (error) {
-        setError("No se pudo cargar el catálogo de iglesias.");
-        setCargandoIglesias(false);
-        return;
+          supabase
+            .from("campamentos")
+            .select(`
+              id,
+              nombre,
+              precio_inscripcion
+            `)
+            .eq("estado", "ACTIVO")
+            .order("fecha_registro", {
+              ascending: false,
+            }),
+        ]);
+
+        if (resultadoIglesias.error) {
+          setError(
+            "No se pudo cargar el catálogo de iglesias."
+          );
+        } else {
+          setIglesias(
+            resultadoIglesias.data || []
+          );
+        }
+
+        if (resultadoCampamentos.error) {
+          setError(
+            "No se pudo cargar el catálogo de campamentos."
+          );
+        } else {
+          setCampamentos(
+            resultadoCampamentos.data || []
+          );
+        }
+      } finally {
+        setCargandoCatalogos(false);
       }
-
-      setIglesias(data || []);
-      setCargandoIglesias(false);
     }
 
-    cargarIglesias();
+    cargarCatalogos();
   }, []);
+
+  // ============================================================
+  // CAMBIAR CAMPAMENTO
+  // ============================================================
+
+  function cambiarCampamento(id: string) {
+    setCampamentoId(id);
+
+    const campamento =
+      campamentos.find(
+        (item) =>
+          item.id === Number(id)
+      );
+
+    if (campamento) {
+      setMeta(
+        String(
+          campamento.precio_inscripcion
+        )
+      );
+    } else {
+      setMeta("");
+    }
+  }
+
+  // ============================================================
+  // CAMBIAR INSCRIPCIÓN OPCIONAL
+  // ============================================================
+
+  function cambiarInscribirAhora(
+    valor: boolean
+  ) {
+    setInscribirAhora(valor);
+
+    if (!valor) {
+      setCampamentoId("");
+      setMeta("");
+    }
+  }
+
+  // ============================================================
+  // GUARDAR CAMPISTA
+  // ============================================================
 
   async function guardarCampista(
     e: FormEvent<HTMLFormElement>
@@ -56,70 +207,281 @@ export default function NuevoCampistaPage() {
     e.preventDefault();
 
     setError("");
+    setErrorInscripcion("");
 
-    if (!identidad.trim() || !nombre.trim()) {
-      setError("Identidad y nombre son obligatorios.");
+    // ----------------------------------------------------------
+    // VALIDACIONES PERSONALES
+    // ----------------------------------------------------------
+
+    if (!nombre.trim()) {
+      setError(
+        "El nombre es obligatorio."
+      );
       return;
     }
 
     if (!genero) {
-      setError("Selecciona el género.");
+      setError(
+        "Selecciona el género."
+      );
       return;
     }
 
     if (!fechaNacimiento) {
-      setError("Ingresa la fecha de nacimiento.");
+      setError(
+        "Ingresa la fecha de nacimiento."
+      );
       return;
     }
 
-    if (new Date(fechaNacimiento) > new Date()) {
-      setError("La fecha de nacimiento no puede ser futura.");
+    if (
+      new Date(
+        `${fechaNacimiento}T00:00:00`
+      ) > new Date()
+    ) {
+      setError(
+        "La fecha de nacimiento no puede ser futura."
+      );
       return;
+    }
+
+    // ----------------------------------------------------------
+    // VALIDACIONES INSCRIPCIÓN
+    // ----------------------------------------------------------
+
+    if (inscribirAhora) {
+      if (!campamentoId) {
+        setError(
+          "Selecciona el campamento al que deseas inscribir al campista."
+        );
+        return;
+      }
+
+      if (
+        !meta ||
+        Number(meta) <= 0
+      ) {
+        setError(
+          "Ingresa una meta de ahorro válida."
+        );
+        return;
+      }
     }
 
     setGuardando(true);
 
     try {
-      const response = await fetch("/api/campistas", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          identidad: identidad.trim(),
-          nombre: nombre.trim(),
-          telefono: telefono.trim(),
-          iglesia_id: iglesiaId
-            ? Number(iglesiaId)
-            : null,
-          genero,
-          fecha_nacimiento: fechaNacimiento,
-        }),
-      });
+      // ========================================================
+      // 1. CREAR CAMPISTA
+      // ========================================================
 
-      const resultado = await response.json();
+      const responseCampista =
+        await fetch(
+          "/api/campistas",
+          {
+            method: "POST",
 
-      if (!response.ok) {
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              identidad:
+                identidad.trim(),
+
+              nombre:
+                nombre.trim(),
+
+              telefono:
+                telefono.trim(),
+
+              iglesia_id:
+                iglesiaId
+                  ? Number(
+                      iglesiaId
+                    )
+                  : null,
+
+              genero,
+
+              fecha_nacimiento:
+                fechaNacimiento,
+            }),
+          }
+        );
+
+      const resultadoCampista =
+        await responseCampista.json();
+
+      if (!responseCampista.ok) {
         setError(
-          resultado.error ||
+          resultadoCampista.error ||
             "No se pudo registrar el campista."
         );
+
         return;
       }
 
-      setPinGenerado(resultado.pin);
-      setCampistaRegistrado(resultado.campista.nombre);
+      const nuevoCampistaId =
+        Number(
+          resultadoCampista
+            .campista
+            .id
+        );
+
+      const nuevoCodigo =
+        resultadoCampista
+          .codigo_campista ||
+        resultadoCampista
+          .campista
+          .codigo_campista;
+
+      const nuevoPin =
+        resultadoCampista.pin;
+
+      // Guardamos inmediatamente los datos porque
+      // el campista YA fue creado.
+      setCampistaId(
+        nuevoCampistaId
+      );
+
+      setCampistaRegistrado(
+        resultadoCampista
+          .campista
+          .nombre
+      );
+
+      setCodigoCampista(
+        nuevoCodigo
+      );
+
+      setPinGenerado(
+        nuevoPin
+      );
+
+      setInscripcionSolicitada(
+        inscribirAhora
+      );
+
+      // ========================================================
+      // 2. SI NO DESEA INSCRIPCIÓN, TERMINAMOS
+      // ========================================================
+
+      if (!inscribirAhora) {
+        return;
+      }
+
+      // ========================================================
+      // 3. INSCRIBIR AL CAMPAMENTO
+      // ========================================================
+
+      const campamentoSeleccionado =
+        campamentos.find(
+          (campamento) =>
+            campamento.id ===
+            Number(
+              campamentoId
+            )
+        );
+
+      const responseInscripcion =
+        await fetch(
+          "/api/inscripciones",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              campista_id:
+                nuevoCampistaId,
+
+              campamento_id:
+                Number(
+                  campamentoId
+                ),
+
+              meta:
+                Number(meta),
+            }),
+          }
+        );
+
+      const resultadoInscripcion =
+        await responseInscripcion.json();
+
+      if (!responseInscripcion.ok) {
+        /*
+         * IMPORTANTE:
+         *
+         * El campista YA existe.
+         * Por eso NO mostramos el formulario otra vez.
+         *
+         * Mostraremos sus credenciales y avisaremos
+         * que solo falló la inscripción.
+         */
+        setErrorInscripcion(
+          resultadoInscripcion.error ||
+            "El campista fue registrado, pero no se pudo completar la inscripción al campamento."
+        );
+
+        return;
+      }
+
+      setInscripcionRealizada(
+        true
+      );
+
+      setCampamentoRegistrado(
+        campamentoSeleccionado
+          ?.nombre ||
+          "Campamento seleccionado"
+      );
+
+      setMetaRegistrada(
+        Number(meta)
+      );
     } catch {
-      setError("No se pudo conectar con el servidor.");
+      /*
+       * Si todavía no tenemos campistaId,
+       * significa que probablemente falló antes
+       * de crear el campista.
+       */
+      if (!campistaId) {
+        setError(
+          "No se pudo conectar con el servidor."
+        );
+      } else {
+        setErrorInscripcion(
+          "El campista fue registrado, pero ocurrió un problema al intentar inscribirlo."
+        );
+      }
     } finally {
       setGuardando(false);
     }
   }
 
-  if (pinGenerado) {
+  // ============================================================
+  // PANTALLA DE REGISTRO EXITOSO
+  // ============================================================
+
+  if (
+    pinGenerado &&
+    codigoCampista
+  ) {
+    const textoCredenciales =
+      `Campista: ${campistaRegistrado}\n` +
+      `Código de campista: ${codigoCampista}\n` +
+      `PIN de consulta: ${pinGenerado}`;
+
     return (
       <div className="max-w-xl">
-        <div className="rounded-2xl border border-emerald-200 bg-white p-8 shadow-sm">
+        <div className="rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm sm:p-8">
+          {/* CABECERA */}
           <p className="text-sm font-semibold uppercase tracking-wide text-emerald-600">
             Campista registrado
           </p>
@@ -129,40 +491,141 @@ export default function NuevoCampistaPage() {
           </h1>
 
           <p className="mt-3 text-slate-500">
-            {campistaRegistrado} fue registrado correctamente.
+            {campistaRegistrado} fue
+            registrado correctamente.
           </p>
 
-          <div className="mt-6 rounded-2xl bg-slate-50 p-6 text-center">
-            <p className="text-sm font-medium text-slate-500">
-              PIN de consulta
-            </p>
+          {/* CREDENCIALES */}
+          <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200">
+            {/* CÓDIGO */}
+            <div className="bg-slate-50 p-6 text-center">
+              <p className="text-sm font-medium text-slate-500">
+                Código de campista
+              </p>
 
-            <p className="mt-3 text-4xl font-bold tracking-[0.25em] text-slate-900">
-              {pinGenerado}
-            </p>
+              <p className="mt-3 text-3xl font-bold tracking-wide text-slate-900">
+                {codigoCampista}
+              </p>
+            </div>
 
-            <p className="mt-4 text-sm text-slate-500">
-              Entrega este PIN al campista. Lo usará junto
-              con su identidad para consultar su ahorro.
-            </p>
+            {/* PIN */}
+            <div className="border-t border-slate-200 bg-white p-6 text-center">
+              <p className="text-sm font-medium text-slate-500">
+                PIN de consulta
+              </p>
+
+              <p className="mt-3 text-4xl font-bold tracking-[0.20em] text-slate-900">
+                {pinGenerado}
+              </p>
+            </div>
           </div>
 
+          {/* INSCRIPCIÓN EXITOSA */}
+          {inscripcionSolicitada &&
+            inscripcionRealizada && (
+              <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                <p className="font-semibold text-emerald-800">
+                  Inscripción realizada
+                </p>
+
+                <div className="mt-3 space-y-2 text-sm text-emerald-700">
+                  <div className="flex items-center justify-between gap-4">
+                    <span>
+                      Campamento
+                    </span>
+
+                    <span className="text-right font-semibold">
+                      {
+                        campamentoRegistrado
+                      }
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4">
+                    <span>
+                      Meta de ahorro
+                    </span>
+
+                    <span className="font-semibold">
+                      {formatearMoneda(
+                        metaRegistrada
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {/* SIN INSCRIPCIÓN */}
+          {!inscripcionSolicitada && (
+            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+              El campista fue registrado
+              sin inscripción a un
+              campamento. Puedes
+              inscribirlo posteriormente
+              desde su perfil.
+            </div>
+          )}
+
+          {/* ERROR SOLO EN INSCRIPCIÓN */}
+          {errorInscripcion && (
+            <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
+              <p className="font-semibold text-amber-800">
+                Campista registrado,
+                inscripción pendiente
+              </p>
+
+              <p className="mt-2 text-sm text-amber-700">
+                {errorInscripcion}
+              </p>
+
+              <p className="mt-2 text-sm text-amber-700">
+                No vuelvas a registrar
+                al campista. Puedes
+                completar la inscripción
+                desde su perfil.
+              </p>
+            </div>
+          )}
+
+          {/* AVISO */}
+          <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-4 text-sm text-blue-700">
+            Entrega el código de
+            campista y el PIN. Estos
+            datos se utilizarán para
+            consultar su ahorro.
+          </div>
+
+          {/* BOTONES */}
           <div className="mt-6 space-y-3">
             <button
               type="button"
               onClick={() => {
                 navigator.clipboard
-                  .writeText(pinGenerado)
-                  .catch(() => {});
+                  .writeText(
+                    textoCredenciales
+                  )
+                  .catch(
+                    () => {}
+                  );
               }}
-              className="w-full rounded-xl border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="w-full rounded-xl border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
-              Copiar PIN
+              Copiar código y PIN
             </button>
+
+            {campistaId && (
+              <Link
+                href={`/admin/campistas/${campistaId}`}
+                className="block w-full rounded-xl border border-emerald-200 bg-emerald-50 px-6 py-3 text-center text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+              >
+                Ver perfil del campista
+              </Link>
+            )}
 
             <Link
               href="/admin/campistas"
-              className="block w-full rounded-xl bg-emerald-600 px-6 py-3 text-center text-sm font-semibold text-white hover:bg-emerald-700"
+              className="block w-full rounded-xl bg-emerald-600 px-6 py-3 text-center text-sm font-semibold text-white transition hover:bg-emerald-700"
             >
               Finalizar
             </Link>
@@ -172,8 +635,13 @@ export default function NuevoCampistaPage() {
     );
   }
 
+  // ============================================================
+  // FORMULARIO
+  // ============================================================
+
   return (
     <>
+      {/* CABECERA */}
       <div className="mb-8">
         <Link
           href="/admin/campistas"
@@ -187,144 +655,412 @@ export default function NuevoCampistaPage() {
         </h1>
 
         <p className="mt-2 text-slate-500">
-          Ingresa los datos personales del campista.
+          Ingresa los datos personales
+          y, si deseas, inscríbelo a un
+          campamento de una vez.
         </p>
       </div>
 
       <div className="max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <form onSubmit={guardarCampista} className="space-y-6">
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">
-              Número de identidad *
-            </label>
+        <form
+          onSubmit={
+            guardarCampista
+          }
+          className="space-y-8"
+        >
+          {/* ================================================== */}
+          {/* DATOS PERSONALES */}
+          {/* ================================================== */}
 
-            <input
-              type="text"
-              value={identidad}
-              onChange={(e) => setIdentidad(e.target.value)}
-              placeholder="0801-2000-00000"
-              required
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            />
-          </div>
+          <section>
+            <div className="mb-5">
+              <h2 className="text-lg font-bold text-slate-900">
+                Datos del campista
+              </h2>
 
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">
-              Nombre completo *
-            </label>
-
-            <input
-              type="text"
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              placeholder="Nombre completo"
-              required
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            />
-          </div>
-
-          <div className="grid gap-6 sm:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Género *
-              </label>
-
-              <select
-                value={genero}
-                onChange={(e) => setGenero(e.target.value)}
-                required
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-              >
-                <option value="">
-                  Selecciona una opción
-                </option>
-
-                <option value="MASCULINO">
-                  Masculino
-                </option>
-
-                <option value="FEMENINO">
-                  Femenino
-                </option>
-              </select>
+              <p className="mt-1 text-sm text-slate-500">
+                Información personal
+                del nuevo campista.
+              </p>
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Fecha de nacimiento *
-              </label>
+            <div className="space-y-6">
+              {/* IDENTIDAD */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Número de identidad
+                </label>
 
-              <input
-                type="date"
-                value={fechaNacimiento}
-                onChange={(e) =>
-                  setFechaNacimiento(e.target.value)
-                }
-                required
-                max={new Date().toISOString().split("T")[0]}
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-              />
-            </div>
-          </div>
+                <input
+                  type="text"
+                  value={
+                    identidad
+                  }
+                  onChange={(e) =>
+                    setIdentidad(
+                      e.target.value
+                    )
+                  }
+                  placeholder="0801-2000-00000"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
 
-          <div className="grid gap-6 sm:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Teléfono
-              </label>
+                <p className="mt-2 text-xs text-slate-500">
+                  Opcional. Si todavía
+                  no tiene identidad,
+                  deja este campo vacío.
+                </p>
+              </div>
 
-              <input
-                type="tel"
-                value={telefono}
-                onChange={(e) =>
-                  setTelefono(e.target.value)
-                }
-                placeholder="9999-9999"
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-              />
-            </div>
+              {/* NOMBRE */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Nombre completo *
+                </label>
 
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Iglesia
-              </label>
+                <input
+                  type="text"
+                  value={
+                    nombre
+                  }
+                  onChange={(e) =>
+                    setNombre(
+                      e.target.value
+                    )
+                  }
+                  placeholder="Nombre completo"
+                  required
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
+              </div>
 
-              <select
-                value={iglesiaId}
-                onChange={(e) =>
-                  setIglesiaId(e.target.value)
-                }
-                disabled={cargandoIglesias}
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
-              >
-                <option value="">
-                  {cargandoIglesias
-                    ? "Cargando iglesias..."
-                    : "Selecciona una iglesia"}
-                </option>
+              {/* GENERO / FECHA */}
+              <div className="grid gap-6 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Género *
+                  </label>
 
-                {iglesias.map((iglesia) => (
-                  <option
-                    key={iglesia.id}
-                    value={iglesia.id}
+                  <select
+                    value={
+                      genero
+                    }
+                    onChange={(e) =>
+                      setGenero(
+                        e.target.value
+                      )
+                    }
+                    required
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                   >
-                    {iglesia.nombre}
-                  </option>
-                ))}
-              </select>
+                    <option value="">
+                      Selecciona una
+                      opción
+                    </option>
+
+                    <option value="MASCULINO">
+                      Masculino
+                    </option>
+
+                    <option value="FEMENINO">
+                      Femenino
+                    </option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Fecha de nacimiento
+                    *
+                  </label>
+
+                  <input
+                    type="date"
+                    value={
+                      fechaNacimiento
+                    }
+                    onChange={(e) =>
+                      setFechaNacimiento(
+                        e.target.value
+                      )
+                    }
+                    required
+                    max={
+                      new Date()
+                        .toISOString()
+                        .split(
+                          "T"
+                        )[0]
+                    }
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </div>
+              </div>
+
+              {/* TELEFONO / IGLESIA */}
+              <div className="grid gap-6 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Teléfono
+                  </label>
+
+                  <input
+                    type="tel"
+                    value={
+                      telefono
+                    }
+                    onChange={(e) =>
+                      setTelefono(
+                        e.target.value
+                      )
+                    }
+                    placeholder="9999-9999"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Iglesia
+                  </label>
+
+                  <select
+                    value={
+                      iglesiaId
+                    }
+                    onChange={(e) =>
+                      setIglesiaId(
+                        e.target.value
+                      )
+                    }
+                    disabled={
+                      cargandoCatalogos
+                    }
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+                  >
+                    <option value="">
+                      {cargandoCatalogos
+                        ? "Cargando iglesias..."
+                        : "Selecciona una iglesia"}
+                    </option>
+
+                    {iglesias.map(
+                      (
+                        iglesia
+                      ) => (
+                        <option
+                          key={
+                            iglesia.id
+                          }
+                          value={
+                            iglesia.id
+                          }
+                        >
+                          {
+                            iglesia.nombre
+                          }
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+              </div>
             </div>
+          </section>
+
+          {/* ================================================== */}
+          {/* INSCRIPCIÓN A CAMPAMENTO */}
+          {/* ================================================== */}
+
+          <section className="border-t border-slate-200 pt-8">
+            <div className="mb-5">
+              <h2 className="text-lg font-bold text-slate-900">
+                Inscripción a
+                campamento
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Esta parte es opcional.
+                Puedes inscribir al
+                campista inmediatamente
+                o hacerlo después desde
+                su perfil.
+              </p>
+            </div>
+
+            {/* CHECK */}
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-emerald-200 hover:bg-emerald-50/30">
+              <input
+                type="checkbox"
+                checked={
+                  inscribirAhora
+                }
+                onChange={(e) =>
+                  cambiarInscribirAhora(
+                    e.target.checked
+                  )
+                }
+                className="mt-1 h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+
+              <div>
+                <p className="font-semibold text-slate-900">
+                  Inscribir al
+                  campista ahora
+                </p>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Selecciona un
+                  campamento y define
+                  su meta de ahorro.
+                </p>
+              </div>
+            </label>
+
+            {/* CAMPAMENTO */}
+            {inscribirAhora && (
+              <div className="mt-6 space-y-6">
+                {campamentos.length ===
+                0 ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="font-semibold text-amber-800">
+                      No hay
+                      campamentos
+                      activos
+                    </p>
+
+                    <p className="mt-2 text-sm text-amber-700">
+                      Puedes registrar
+                      al campista sin
+                      inscripción y
+                      crear el
+                      campamento
+                      posteriormente.
+                    </p>
+
+                    <Link
+                      href="/admin/campamentos/nuevo"
+                      className="mt-3 inline-block text-sm font-semibold text-amber-800 underline"
+                    >
+                      Crear campamento
+                    </Link>
+                  </div>
+                ) : (
+                  <>
+                    {/* SELECT CAMPAMENTO */}
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        Campamento *
+                      </label>
+
+                      <select
+                        value={
+                          campamentoId
+                        }
+                        onChange={(e) =>
+                          cambiarCampamento(
+                            e.target.value
+                          )
+                        }
+                        required={
+                          inscribirAhora
+                        }
+                        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                      >
+                        <option value="">
+                          Selecciona un
+                          campamento
+                        </option>
+
+                        {campamentos.map(
+                          (
+                            campamento
+                          ) => (
+                            <option
+                              key={
+                                campamento.id
+                              }
+                              value={
+                                campamento.id
+                              }
+                            >
+                              {
+                                campamento.nombre
+                              }
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </div>
+
+                    {/* META */}
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        Meta de ahorro *
+                      </label>
+
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-semibold text-slate-500">
+                          L
+                        </span>
+
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={
+                            meta
+                          }
+                          onChange={(e) =>
+                            setMeta(
+                              e.target
+                                .value
+                            )
+                          }
+                          required={
+                            inscribirAhora
+                          }
+                          className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-9 pr-4 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                        />
+                      </div>
+
+                      <p className="mt-2 text-xs text-slate-500">
+                        Se llena
+                        automáticamente
+                        con el precio
+                        del campamento,
+                        pero puedes
+                        modificarlo si
+                        existe una beca
+                        o descuento.
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* ================================================== */}
+          {/* INFORMACIÓN AUTOMÁTICA */}
+          {/* ================================================== */}
+
+          <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-4 text-sm text-blue-700">
+            Al registrar al campista,
+            el sistema generará
+            automáticamente su código
+            único y un PIN de consulta
+            de 6 dígitos.
           </div>
 
-          <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-            El sistema generará automáticamente un PIN de consulta de 6 dígitos.
-          </div>
-
+          {/* ERROR */}
           {error && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </div>
           )}
 
+          {/* BOTONES */}
           <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:justify-end">
             <Link
               href="/admin/campistas"
@@ -335,11 +1071,16 @@ export default function NuevoCampistaPage() {
 
             <button
               type="submit"
-              disabled={guardando}
+              disabled={
+                guardando ||
+                cargandoCatalogos
+              }
               className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {guardando
-                ? "Registrando..."
+                ? inscribirAhora
+                  ? "Registrando e inscribiendo..."
+                  : "Registrando..."
                 : "Registrar campista"}
             </button>
           </div>
@@ -347,4 +1088,20 @@ export default function NuevoCampistaPage() {
       </div>
     </>
   );
+}
+
+// ============================================================
+// UTILIDADES
+// ============================================================
+
+function formatearMoneda(
+  valor: number
+) {
+  return `L ${valor.toLocaleString(
+    "es-HN",
+    {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }
+  )}`;
 }
