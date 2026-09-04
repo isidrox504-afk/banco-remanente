@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { APP_CONFIG } from "@/lib/config/app";
+import CerrarSesion from "./CerrarSesion";
 
 const opciones = [
   {
@@ -35,13 +36,7 @@ export default function MenuMovil() {
   const pathname = usePathname();
   const router = useRouter();
 
-  /*
-   * Precargamos todas las páginas principales
-   * apenas se monta el menú.
-   *
-   * Así, cuando el usuario toca una opción,
-   * Next.js ya tiene adelantada parte de la navegación.
-   */
+  // Precargar las rutas principales
   useEffect(() => {
     opciones.forEach((opcion) => {
       router.prefetch(opcion.href);
@@ -54,7 +49,7 @@ export default function MenuMovil() {
 
   return (
     <div className="sticky top-0 z-40 border-b border-slate-200 bg-white lg:hidden">
-      {/* HEADER */}
+      {/* HEADER MÓVIL */}
       <div className="flex items-center justify-between px-4 py-3">
         <Link
           href="/admin"
@@ -62,6 +57,7 @@ export default function MenuMovil() {
           onClick={cerrarMenu}
           className="flex min-w-0 items-center gap-3"
         >
+          {/* LOGO */}
           <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1 ring-1 ring-slate-200">
             <Image
               src={APP_CONFIG.logo}
@@ -73,6 +69,7 @@ export default function MenuMovil() {
             />
           </div>
 
+          {/* NOMBRE */}
           <div className="min-w-0">
             <p className="truncate text-sm font-bold text-slate-900">
               {APP_CONFIG.nombre}
@@ -84,7 +81,7 @@ export default function MenuMovil() {
           </div>
         </Link>
 
-        {/* HAMBURGUESA */}
+        {/* BOTÓN HAMBURGUESA */}
         <button
           type="button"
           onClick={() => setAbierto((valor) => !valor)}
@@ -93,6 +90,7 @@ export default function MenuMovil() {
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition active:scale-95"
         >
           {abierto ? (
+            // X
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="24"
@@ -108,6 +106,7 @@ export default function MenuMovil() {
               <path d="m6 6 12 12" />
             </svg>
           ) : (
+            // HAMBURGUESA
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="24"
@@ -127,7 +126,7 @@ export default function MenuMovil() {
         </button>
       </div>
 
-      {/* MENÚ */}
+      {/* MENÚ DESPLEGABLE */}
       {abierto && (
         <div className="border-t border-slate-200 bg-white px-4 py-4 shadow-lg">
           <nav className="space-y-2">
@@ -154,6 +153,14 @@ export default function MenuMovil() {
               );
             })}
           </nav>
+
+          {/* SEPARADOR */}
+          <div className="my-4 border-t border-slate-200" />
+
+          {/* CERRAR SESIÓN */}
+          <div className="pb-1">
+            <CerrarSesion />
+          </div>
         </div>
       )}
     </div>
