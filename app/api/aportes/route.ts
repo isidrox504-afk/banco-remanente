@@ -21,7 +21,12 @@ export async function POST(request: Request) {
     const inscripcionId = Number(body.inscripcion_id);
     const monto = Number(body.monto);
 
-    const metodoPago = body.metodo_pago?.trim() || null;
+    const metodoPago =
+      body.metodo_pago?.trim().toUpperCase() || null;
+
+    const bancoTransferencia =
+      body.banco_transferencia?.trim().toUpperCase() || null;
+
     const referencia = body.referencia?.trim() || null;
     const observacion = body.observacion?.trim() || null;
 
@@ -35,6 +40,49 @@ export async function POST(request: Request) {
     if (!Number.isFinite(monto) || monto <= 0) {
       return NextResponse.json(
         { error: "El monto debe ser mayor que cero." },
+        { status: 400 }
+      );
+    }
+
+    /*
+     * Si el método es transferencia,
+     * el banco es obligatorio.
+     */
+    if (
+      metodoPago === "TRANSFERENCIA" &&
+      !bancoTransferencia
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Debe seleccionar el banco de la transferencia.",
+        },
+        { status: 400 }
+      );
+    }
+
+    /*
+     * Validamos que únicamente se puedan guardar
+     * los bancos definidos actualmente.
+     */
+    const bancosPermitidos = [
+      "BAC",
+      "FICOHSA",
+      "ATLANTIDA",
+      "OCCIDENTE",
+      "ACH",
+    ];
+
+    if (
+      metodoPago === "TRANSFERENCIA" &&
+      bancoTransferencia &&
+      !bancosPermitidos.includes(bancoTransferencia)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "El banco seleccionado no es válido.",
+        },
         { status: 400 }
       );
     }
@@ -59,7 +107,10 @@ export async function POST(request: Request) {
 
     if (inscripcion.estado === "CANCELADO") {
       return NextResponse.json(
-        { error: "No se pueden registrar aportes en una inscripción cancelada." },
+        {
+          error:
+            "No se pueden registrar aportes en una inscripción cancelada.",
+        },
         { status: 400 }
       );
     }
@@ -79,7 +130,8 @@ export async function POST(request: Request) {
     }
 
     const totalActual = (aportesActuales || []).reduce(
-      (total, aporte) => total + Number(aporte.monto),
+      (total, aporte) =>
+        total + Number(aporte.monto),
       0
     );
 
@@ -87,7 +139,10 @@ export async function POST(request: Request) {
 
     if (totalActual >= meta) {
       return NextResponse.json(
-        { error: "Esta inscripción ya alcanzó su meta." },
+        {
+          error:
+            "Esta inscripción ya alcanzó su meta.",
+        },
         { status: 400 }
       );
     }
@@ -105,12 +160,25 @@ export async function POST(request: Request) {
       );
     }
 
+    /*
+     * Solo guardamos banco_transferencia
+     * cuando realmente es una transferencia.
+     *
+     * Para efectivo, depósito u otro:
+     * banco_transferencia = null
+     */
+    const bancoAGuardar =
+      metodoPago === "TRANSFERENCIA"
+        ? bancoTransferencia
+        : null;
+
     const { data: aporte, error } = await supabase
       .from("aportes")
       .insert({
         inscripcion_id: inscripcionId,
         monto,
         metodo_pago: metodoPago,
+        banco_transferencia: bancoAGuardar,
         referencia,
         observacion,
         estado: "ACTIVO",
@@ -119,6 +187,10 @@ export async function POST(request: Request) {
         id,
         inscripcion_id,
         monto,
+        metodo_pago,
+        banco_transferencia,
+        referencia,
+        observacion,
         fecha_aporte,
         estado
       `)
@@ -149,7 +221,10 @@ export async function POST(request: Request) {
     });
   } catch {
     return NextResponse.json(
-      { error: "Ocurrió un error al registrar el aporte." },
+      {
+        error:
+          "Ocurrió un error al registrar el aporte.",
+      },
       { status: 500 }
     );
   }

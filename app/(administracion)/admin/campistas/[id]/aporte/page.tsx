@@ -19,6 +19,14 @@ type Inscripcion = {
     | null;
 };
 
+const bancos = [
+  "BAC",
+  "FICOHSA",
+  "ATLANTIDA",
+  "OCCIDENTE",
+  "ACH",
+];
+
 export default function RegistrarAportePage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -30,6 +38,8 @@ export default function RegistrarAportePage() {
 
   const [monto, setMonto] = useState("");
   const [metodoPago, setMetodoPago] = useState("EFECTIVO");
+  const [bancoTransferencia, setBancoTransferencia] =
+    useState("");
   const [referencia, setReferencia] = useState("");
   const [observacion, setObservacion] = useState("");
 
@@ -70,6 +80,14 @@ export default function RegistrarAportePage() {
     cargarInscripcion();
   }, [campistaId]);
 
+  function cambiarMetodoPago(nuevoMetodo: string) {
+    setMetodoPago(nuevoMetodo);
+
+    if (nuevoMetodo !== "TRANSFERENCIA") {
+      setBancoTransferencia("");
+    }
+  }
+
   async function guardarAporte(
     e: FormEvent<HTMLFormElement>
   ) {
@@ -87,6 +105,14 @@ export default function RegistrarAportePage() {
       return;
     }
 
+    if (
+      metodoPago === "TRANSFERENCIA" &&
+      !bancoTransferencia
+    ) {
+      setError("Selecciona el banco de la transferencia.");
+      return;
+    }
+
     setGuardando(true);
 
     try {
@@ -99,6 +125,12 @@ export default function RegistrarAportePage() {
           inscripcion_id: inscripcion.id,
           monto: Number(monto),
           metodo_pago: metodoPago,
+
+          banco_transferencia:
+            metodoPago === "TRANSFERENCIA"
+              ? bancoTransferencia
+              : null,
+
           referencia: referencia.trim(),
           observacion: observacion.trim(),
         }),
@@ -173,6 +205,7 @@ export default function RegistrarAportePage() {
             onSubmit={guardarAporte}
             className="space-y-6"
           >
+            {/* CAMPAMENTO */}
             <div className="rounded-xl bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Campamento
@@ -184,13 +217,17 @@ export default function RegistrarAportePage() {
 
               <p className="mt-1 text-sm text-slate-500">
                 Meta: L{" "}
-                {Number(inscripcion.meta).toLocaleString("es-HN", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+                {Number(inscripcion.meta).toLocaleString(
+                  "es-HN",
+                  {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  }
+                )}
               </p>
             </div>
 
+            {/* MONTO */}
             <div>
               <label
                 htmlFor="monto"
@@ -210,7 +247,9 @@ export default function RegistrarAportePage() {
                   min="0.01"
                   step="0.01"
                   value={monto}
-                  onChange={(e) => setMonto(e.target.value)}
+                  onChange={(e) =>
+                    setMonto(e.target.value)
+                  }
                   required
                   placeholder="500.00"
                   className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-9 pr-4 text-slate-900 placeholder:text-slate-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
@@ -218,6 +257,7 @@ export default function RegistrarAportePage() {
               </div>
             </div>
 
+            {/* MÉTODO DE PAGO */}
             <div>
               <label
                 htmlFor="metodoPago"
@@ -229,20 +269,74 @@ export default function RegistrarAportePage() {
               <select
                 id="metodoPago"
                 value={metodoPago}
-                onChange={(e) => setMetodoPago(e.target.value)}
+                onChange={(e) =>
+                  cambiarMetodoPago(e.target.value)
+                }
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               >
-                <option value="EFECTIVO">Efectivo</option>
+                <option value="EFECTIVO">
+                  Efectivo
+                </option>
+
                 <option value="TRANSFERENCIA">
                   Transferencia
                 </option>
+
                 <option value="DEPOSITO">
                   Depósito
                 </option>
-                <option value="OTRO">Otro</option>
+
+                <option value="OTRO">
+                  Otro
+                </option>
               </select>
             </div>
 
+            {/* BANCO */}
+            {metodoPago === "TRANSFERENCIA" && (
+              <div>
+                <label
+                  htmlFor="bancoTransferencia"
+                  className="mb-2 block text-sm font-semibold text-slate-700"
+                >
+                  Banco *
+                </label>
+
+                <select
+                  id="bancoTransferencia"
+                  value={bancoTransferencia}
+                  onChange={(e) =>
+                    setBancoTransferencia(
+                      e.target.value
+                    )
+                  }
+                  required
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                >
+                  <option value="">
+                    Selecciona un banco
+                  </option>
+
+                  {bancos.map((banco) => (
+                    <option
+                      key={banco}
+                      value={banco}
+                    >
+                      {banco === "ATLANTIDA"
+                        ? "ATLÁNTIDA"
+                        : banco}
+                    </option>
+                  ))}
+                </select>
+
+                <p className="mt-2 text-xs text-slate-500">
+                  Selecciona el banco desde donde se
+                  realizó la transferencia.
+                </p>
+              </div>
+            )}
+
+            {/* REFERENCIA */}
             <div>
               <label
                 htmlFor="referencia"
@@ -255,12 +349,19 @@ export default function RegistrarAportePage() {
                 id="referencia"
                 type="text"
                 value={referencia}
-                onChange={(e) => setReferencia(e.target.value)}
-                placeholder="Número de recibo, transferencia, etc."
+                onChange={(e) =>
+                  setReferencia(e.target.value)
+                }
+                placeholder={
+                  metodoPago === "TRANSFERENCIA"
+                    ? "Número de transferencia"
+                    : "Número de recibo, comprobante, etc."
+                }
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               />
             </div>
 
+            {/* OBSERVACIÓN */}
             <div>
               <label
                 htmlFor="observacion"
@@ -272,19 +373,23 @@ export default function RegistrarAportePage() {
               <textarea
                 id="observacion"
                 value={observacion}
-                onChange={(e) => setObservacion(e.target.value)}
+                onChange={(e) =>
+                  setObservacion(e.target.value)
+                }
                 rows={4}
                 placeholder="Observación opcional..."
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               />
             </div>
 
+            {/* ERROR */}
             {error && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
               </div>
             )}
 
+            {/* BOTONES */}
             <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:justify-end">
               <Link
                 href={`/admin/campistas/${campistaId}`}

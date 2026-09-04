@@ -1,7 +1,9 @@
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CerrarSesion from "./CerrarSesion";
+import { APP_CONFIG } from "@/lib/config/app";
 
 export default async function AdminLayout({
   children,
@@ -16,9 +18,9 @@ export default async function AdminLayout({
   } = await supabase.auth.getUser();
 
   // Si no hay sesión, regresar al login
-if (!user) {
-  redirect("/admin/login");
-}
+  if (!user) {
+    redirect("/admin/login");
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -31,14 +33,29 @@ if (!user) {
           <div className="border-b border-slate-200 px-6 py-6">
             <Link
               href="/admin"
-              className="text-xl font-bold text-slate-900"
+              className="flex items-center gap-3"
             >
-              Banco de Campistas
-            </Link>
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-50">
+                <Image
+                  src={APP_CONFIG.logo}
+                  alt={`Logo ${APP_CONFIG.nombre}`}
+                  width={56}
+                  height={56}
+                  className="h-full w-full object-contain"
+                  priority
+                />
+              </div>
 
-            <p className="mt-1 text-sm text-slate-500">
-              Panel administrativo
-            </p>
+              <div className="min-w-0">
+                <p className="text-lg font-bold leading-tight text-slate-900">
+                  {APP_CONFIG.nombre}
+                </p>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Panel administrativo
+                </p>
+              </div>
+            </Link>
           </div>
 
           {/* NAVEGACIÓN */}
@@ -79,10 +96,10 @@ if (!user) {
             </Link>
 
             <Link
-              href="/admin/parametros"
+              href="/admin/reportes"
               className="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
             >
-              Parámetros
+              Reportes
             </Link>
           </nav>
 
@@ -111,9 +128,28 @@ if (!user) {
             <div className="flex items-center justify-between gap-4">
               <Link
                 href="/admin"
-                className="font-bold text-slate-900"
+                className="flex min-w-0 items-center gap-3"
               >
-                Banco de Campistas
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-50">
+                  <Image
+                    src={APP_CONFIG.logo}
+                    alt={`Logo ${APP_CONFIG.nombre}`}
+                    width={40}
+                    height={40}
+                    className="h-full w-full object-contain"
+                    priority
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-slate-900">
+                    {APP_CONFIG.nombre}
+                  </p>
+
+                  <p className="text-xs text-slate-500">
+                    Panel administrativo
+                  </p>
+                </div>
               </Link>
 
               <CerrarSesion />
@@ -123,44 +159,44 @@ if (!user) {
             <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
               <Link
                 href="/admin"
-                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700"
+                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
               >
                 Dashboard
               </Link>
 
               <Link
                 href="/admin/campistas"
-                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700"
+                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
               >
                 Campistas
               </Link>
 
               <Link
                 href="/admin/aportes"
-                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700"
+                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
               >
                 Aportes
               </Link>
 
               <Link
                 href="/admin/campamentos"
-                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700"
+                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
               >
                 Campamentos
               </Link>
 
               <Link
                 href="/admin/iglesias"
-                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700"
+                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
               >
                 Iglesias
               </Link>
 
               <Link
-                href="/admin/parametros"
-                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700"
+                href="/admin/reportes"
+                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
               >
-                Parámetros
+                Reportes
               </Link>
             </div>
           </header>
