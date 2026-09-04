@@ -75,13 +75,6 @@ export default async function AdminLayout({
             </Link>
 
             <Link
-              href="/admin/aportes"
-              className="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
-            >
-              Aportes
-            </Link>
-
-            <Link
               href="/admin/campamentos"
               className="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
             >
