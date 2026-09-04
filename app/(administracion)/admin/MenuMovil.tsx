@@ -16,10 +16,6 @@ const opciones = [
     href: "/admin/campistas",
   },
   {
-    nombre: "Aportes",
-    href: "/admin/aportes",
-  },
-  {
     nombre: "Campamentos",
     href: "/admin/campamentos",
   },
