@@ -1,4 +1,6 @@
+import Image from "next/image";
 import Link from "next/link";
+import { APP_CONFIG } from "@/lib/config/app";
 
 export default function HomePage() {
   return (
@@ -6,25 +8,38 @@ export default function HomePage() {
       {/* HEADER */}
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-          <div>
-            <p className="text-xl font-bold text-slate-900">
-              Banco Remanente
-            </p>
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
+              <Image
+                src={APP_CONFIG.logo}
+                alt={`Logo ${APP_CONFIG.nombre}`}
+                width={56}
+                height={56}
+                className="h-full w-full object-contain"
+                priority
+              />
+            </div>
 
-            <p className="text-sm text-slate-500">
-              Remanente de Jehová
-            </p>
+            <div>
+              <p className="text-xl font-bold text-slate-900">
+                {APP_CONFIG.nombre}
+              </p>
+
+              <p className="text-sm text-slate-500">
+                {APP_CONFIG.organizacion}
+              </p>
+            </div>
           </div>
         </div>
       </header>
 
       {/* CONTENIDO */}
-      <section className="mx-auto flex min-h-[calc(100vh-82px)] max-w-6xl items-center px-6 py-16">
+      <section className="mx-auto flex min-h-[calc(100vh-95px)] max-w-6xl items-center px-6 py-16">
         <div className="grid w-full items-center gap-12 lg:grid-cols-2">
           {/* TEXTO */}
           <div>
             <p className="text-sm font-semibold uppercase tracking-wider text-emerald-600">
-              Banco de Campistas
+              {APP_CONFIG.nombreCorto}
             </p>
 
             <h1 className="mt-4 max-w-2xl text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl lg:text-6xl">
@@ -32,9 +47,9 @@ export default function HomePage() {
             </h1>
 
             <p className="mt-6 max-w-xl text-lg leading-8 text-slate-600">
-              Una plataforma para que los campistas consulten su ahorro
-              y para que los administradores gestionen campamentos,
-              inscripciones y aportes.
+              {APP_CONFIG.descripcion}. Consulta tu progreso de ahorro
+              y administra campistas, campamentos, inscripciones y aportes
+              desde una sola plataforma.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -66,7 +81,7 @@ export default function HomePage() {
               </h2>
 
               <p className="mt-3 leading-7 text-slate-600">
-                Ingresa tu número de identidad y PIN para ver tu meta,
+                Ingresa tu número de identidad y PIN para consultar tu meta,
                 total ahorrado, saldo pendiente e historial de aportes.
               </p>
 
@@ -95,7 +110,7 @@ export default function HomePage() {
                 </p>
 
                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Gestión de campistas, iglesias, campamentos y aportes.
+                  Gestión de campistas, iglesias, campamentos, aportes y reportes.
                 </p>
               </div>
             </div>
