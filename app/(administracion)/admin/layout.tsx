@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CerrarSesion from "./CerrarSesion";
 import { APP_CONFIG } from "@/lib/config/app";
+import MenuMovil from "./MenuMovil";
 
 export default async function AdminLayout({
   children,
@@ -26,7 +27,7 @@ export default async function AdminLayout({
     <div className="min-h-screen bg-slate-50">
       <div className="flex min-h-screen">
         {/* =====================================================
-            MENÚ LATERAL
+            MENÚ LATERAL ESCRITORIO
         ===================================================== */}
         <aside className="hidden w-72 flex-col border-r border-slate-200 bg-white lg:flex">
           {/* LOGO / NOMBRE */}
@@ -116,83 +117,8 @@ export default async function AdminLayout({
             CONTENIDO
         ===================================================== */}
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* HEADER MÓVIL */}
-          <header className="border-b border-slate-200 bg-white px-4 py-4 lg:hidden">
-            <div className="flex items-center justify-between gap-4">
-              <Link
-                href="/admin"
-                className="flex min-w-0 items-center gap-3"
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-50">
-                  <Image
-                    src={APP_CONFIG.logo}
-                    alt={`Logo ${APP_CONFIG.nombre}`}
-                    width={40}
-                    height={40}
-                    className="h-full w-full object-contain"
-                    priority
-                  />
-                </div>
-
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-slate-900">
-                    {APP_CONFIG.nombre}
-                  </p>
-
-                  <p className="text-xs text-slate-500">
-                    Panel administrativo
-                  </p>
-                </div>
-              </Link>
-
-              <CerrarSesion />
-            </div>
-
-            {/* MENÚ MÓVIL */}
-            <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-              <Link
-                href="/admin"
-                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
-              >
-                Dashboard
-              </Link>
-
-              <Link
-                href="/admin/campistas"
-                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
-              >
-                Campistas
-              </Link>
-
-              <Link
-                href="/admin/aportes"
-                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
-              >
-                Aportes
-              </Link>
-
-              <Link
-                href="/admin/campamentos"
-                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
-              >
-                Campamentos
-              </Link>
-
-              <Link
-                href="/admin/iglesias"
-                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
-              >
-                Iglesias
-              </Link>
-
-              <Link
-                href="/admin/reportes"
-                className="whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
-              >
-                Reportes
-              </Link>
-            </div>
-          </header>
+          {/* MENÚ MÓVIL HAMBURGUESA */}
+          <MenuMovil />
 
           {/* PÁGINA */}
           <main className="flex-1 p-4 sm:p-6 lg:p-8">
