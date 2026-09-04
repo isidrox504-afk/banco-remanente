@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { APP_CONFIG } from "@/lib/config/app";
 
 const opciones = [
@@ -31,18 +31,34 @@ const opciones = [
 
 export default function MenuMovil() {
   const [abierto, setAbierto] = useState(false);
+
   const pathname = usePathname();
+  const router = useRouter();
+
+  /*
+   * Precargamos todas las páginas principales
+   * apenas se monta el menú.
+   *
+   * Así, cuando el usuario toca una opción,
+   * Next.js ya tiene adelantada parte de la navegación.
+   */
+  useEffect(() => {
+    opciones.forEach((opcion) => {
+      router.prefetch(opcion.href);
+    });
+  }, [router]);
 
   function cerrarMenu() {
     setAbierto(false);
   }
 
   return (
-    <div className="border-b border-slate-200 bg-white lg:hidden">
-      {/* HEADER MOVIL */}
+    <div className="sticky top-0 z-40 border-b border-slate-200 bg-white lg:hidden">
+      {/* HEADER */}
       <div className="flex items-center justify-between px-4 py-3">
         <Link
           href="/admin"
+          prefetch
           onClick={cerrarMenu}
           className="flex min-w-0 items-center gap-3"
         >
@@ -63,20 +79,18 @@ export default function MenuMovil() {
             </p>
 
             <p className="text-xs text-slate-500">
-              Administración
+              Panel administrativo
             </p>
           </div>
         </Link>
 
-        {/* BOTON HAMBURGUESA */}
+        {/* HAMBURGUESA */}
         <button
           type="button"
-          onClick={() => setAbierto(!abierto)}
-          aria-label={
-            abierto ? "Cerrar menú" : "Abrir menú"
-          }
+          onClick={() => setAbierto((valor) => !valor)}
+          aria-label={abierto ? "Cerrar menú" : "Abrir menú"}
           aria-expanded={abierto}
-          className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition active:scale-95"
         >
           {abierto ? (
             <svg
@@ -113,9 +127,9 @@ export default function MenuMovil() {
         </button>
       </div>
 
-      {/* MENU DESPLEGABLE */}
+      {/* MENÚ */}
       {abierto && (
-        <div className="border-t border-slate-200 px-4 py-4">
+        <div className="border-t border-slate-200 bg-white px-4 py-4 shadow-lg">
           <nav className="space-y-2">
             {opciones.map((opcion) => {
               const activo =
@@ -127,8 +141,9 @@ export default function MenuMovil() {
                 <Link
                   key={opcion.href}
                   href={opcion.href}
+                  prefetch
                   onClick={cerrarMenu}
-                  className={`block rounded-xl px-4 py-3 text-sm font-semibold transition ${
+                  className={`block rounded-xl px-4 py-3.5 text-sm font-semibold transition active:scale-[0.99] ${
                     activo
                       ? "bg-emerald-50 text-emerald-700"
                       : "text-slate-700 hover:bg-slate-50"
