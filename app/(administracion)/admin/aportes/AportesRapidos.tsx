@@ -1,6 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 type Inscripcion = {
   id: number;
@@ -13,7 +18,8 @@ type Inscripcion = {
 
 type Campista = {
   id: number;
-  identidad: string;
+  codigo_campista: string | null;
+  identidad: string | null;
   nombre: string;
   telefono: string | null;
   genero: string | null;
@@ -39,70 +45,188 @@ export default function AportesRapidos() {
     useState<Campista | null>(null);
 
   const [monto, setMonto] = useState("");
-  const [metodoPago, setMetodoPago] = useState("EFECTIVO");
-  const [bancoTransferencia, setBancoTransferencia] = useState("");
+  const [metodoPago, setMetodoPago] =
+    useState("EFECTIVO");
+
+  const [
+    bancoTransferencia,
+    setBancoTransferencia,
+  ] = useState("");
+
   const [referencia, setReferencia] = useState("");
   const [observacion, setObservacion] = useState("");
 
   const [buscando, setBuscando] = useState(false);
+  const [busquedaRealizada, setBusquedaRealizada] =
+    useState(false);
+
   const [guardando, setGuardando] = useState(false);
 
   const [error, setError] = useState("");
   const [mensaje, setMensaje] = useState("");
 
+  /*
+   * Guardamos la petición activa.
+   *
+   * Si el usuario sigue escribiendo,
+   * cancelamos la consulta anterior.
+   */
+  const abortControllerRef =
+    useRef<AbortController | null>(null);
+
+  // ==========================================================
+  // BÚSQUEDA CON DEBOUNCE
+  // ==========================================================
+
   useEffect(() => {
     const texto = buscar.trim();
 
-    if (texto.length < 2) {
-      setCampistas([]);
+    /*
+     * Si ya seleccionamos un campista,
+     * no necesitamos volver a buscar
+     * simplemente porque colocamos su nombre
+     * en el input.
+     */
+    if (campistaSeleccionado) {
       return;
     }
 
+    /*
+     * Cancelamos cualquier petición anterior.
+     */
+    abortControllerRef.current?.abort();
+
+    if (texto.length < 2) {
+      setCampistas([]);
+      setBuscando(false);
+      setBusquedaRealizada(false);
+      return;
+    }
+
+    /*
+     * Todavía estamos esperando que el usuario
+     * termine de escribir.
+     */
+    setBuscando(true);
+    setBusquedaRealizada(false);
+
     const timer = setTimeout(() => {
       buscarCampistas(texto);
-    }, 350);
+    }, 250);
 
-    return () => clearTimeout(timer);
-  }, [buscar]);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [buscar, campistaSeleccionado]);
+
+  // ==========================================================
+  // BUSCAR CAMPISTAS
+  // ==========================================================
 
   async function buscarCampistas(texto: string) {
+    /*
+     * Cancelar búsqueda anterior.
+     */
+    abortControllerRef.current?.abort();
+
+    const controller = new AbortController();
+
+    abortControllerRef.current = controller;
+
     try {
       setBuscando(true);
+      setBusquedaRealizada(false);
       setError("");
 
       const response = await fetch(
-        `/api/aportes/buscar-campistas?buscar=${encodeURIComponent(texto)}`,
+        `/api/aportes/buscar-campistas?buscar=${encodeURIComponent(
+          texto
+        )}`,
         {
           cache: "no-store",
+          signal: controller.signal,
         }
       );
 
       const data = await response.json();
 
+      /*
+       * Si esta petición ya fue cancelada,
+       * ignoramos completamente su resultado.
+       */
+      if (controller.signal.aborted) {
+        return;
+      }
+
       if (!response.ok) {
         setError(
-          data.error || "No fue posible buscar campistas."
+          data.error ||
+            "No fue posible buscar campistas."
         );
+
         setCampistas([]);
+        setBusquedaRealizada(true);
+
         return;
       }
 
       setCampistas(data.campistas || []);
-    } catch {
+      setBusquedaRealizada(true);
+    } catch (error) {
+      /*
+       * AbortError significa que nosotros mismos
+       * cancelamos la petición porque el usuario
+       * siguió escribiendo.
+       *
+       * No debe mostrarse como error.
+       */
+      if (
+        error instanceof DOMException &&
+        error.name === "AbortError"
+      ) {
+        return;
+      }
+
       setError(
         "Ocurrió un error al buscar campistas."
       );
+
       setCampistas([]);
+      setBusquedaRealizada(true);
     } finally {
-      setBuscando(false);
+      /*
+       * Solo quitamos "Buscando..." si esta sigue
+       * siendo la petición más reciente.
+       */
+      if (
+        abortControllerRef.current === controller
+      ) {
+        setBuscando(false);
+      }
     }
   }
 
-  function seleccionarCampista(campista: Campista) {
+  // ==========================================================
+  // SELECCIONAR CAMPISTA
+  // ==========================================================
+
+  function seleccionarCampista(
+    campista: Campista
+  ) {
+    /*
+     * Ya encontramos al campista.
+     * Cancelamos cualquier petición pendiente.
+     */
+    abortControllerRef.current?.abort();
+
     setCampistaSeleccionado(campista);
+
     setCampistas([]);
+
     setBuscar(campista.nombre);
 
+    setBusquedaRealizada(false);
+
     setMonto("");
     setMetodoPago("EFECTIVO");
     setBancoTransferencia("");
@@ -111,12 +235,23 @@ export default function AportesRapidos() {
 
     setError("");
     setMensaje("");
+    setBuscando(false);
   }
+
+  // ==========================================================
+  // LIMPIAR SELECCIÓN
+  // ==========================================================
 
   function limpiarSeleccion() {
+    abortControllerRef.current?.abort();
+
     setCampistaSeleccionado(null);
+
     setBuscar("");
+
     setCampistas([]);
+
+    setBusquedaRealizada(false);
 
     setMonto("");
     setMetodoPago("EFECTIVO");
@@ -126,7 +261,12 @@ export default function AportesRapidos() {
 
     setError("");
     setMensaje("");
+    setBuscando(false);
   }
+
+  // ==========================================================
+  // REGISTRAR APORTE
+  // ==========================================================
 
   async function registrarAporte(
     e: FormEvent<HTMLFormElement>
@@ -137,7 +277,10 @@ export default function AportesRapidos() {
     setMensaje("");
 
     if (!campistaSeleccionado) {
-      setError("Debe seleccionar un campista.");
+      setError(
+        "Debe seleccionar un campista."
+      );
+
       return;
     }
 
@@ -145,6 +288,7 @@ export default function AportesRapidos() {
       setError(
         "El campista no tiene una inscripción activa."
       );
+
       return;
     }
 
@@ -157,30 +301,55 @@ export default function AportesRapidos() {
       setError(
         "Ingrese un monto válido mayor que cero."
       );
+
+      return;
+    }
+
+    if (
+      metodoPago === "TRANSFERENCIA" &&
+      !bancoTransferencia
+    ) {
+      setError(
+        "Debe seleccionar el banco de la transferencia."
+      );
+
       return;
     }
 
     try {
       setGuardando(true);
 
-      const response = await fetch("/api/aportes", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          inscripcion_id:
-            campistaSeleccionado.inscripcion.id,
-          monto: montoNumerico,
-          metodo_pago: metodoPago,
-          banco_transferencia:
-            metodoPago === "TRANSFERENCIA"
-              ? bancoTransferencia
-              : null,
-          referencia,
-          observacion,
-        }),
-      });
+      const response = await fetch(
+        "/api/aportes",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          body: JSON.stringify({
+            inscripcion_id:
+              campistaSeleccionado.inscripcion.id,
+
+            monto: montoNumerico,
+
+            metodo_pago:
+              metodoPago,
+
+            banco_transferencia:
+              metodoPago ===
+              "TRANSFERENCIA"
+                ? bancoTransferencia
+                : null,
+
+            referencia,
+
+            observacion,
+          }),
+        }
+      );
 
       const data = await response.json();
 
@@ -189,17 +358,25 @@ export default function AportesRapidos() {
           data.error ||
             "No fue posible registrar el aporte."
         );
+
         return;
       }
 
       const campistaActualizado: Campista = {
         ...campistaSeleccionado,
+
         inscripcion: {
           ...campistaSeleccionado.inscripcion,
+
           total_ahorrado:
-            Number(data.total_ahorrado) || 0,
+            Number(
+              data.total_ahorrado
+            ) || 0,
+
           pendiente:
-            Number(data.pendiente) || 0,
+            Number(
+              data.pendiente
+            ) || 0,
         },
       };
 
@@ -229,7 +406,10 @@ export default function AportesRapidos() {
 
   return (
     <div>
-      {/* ENCABEZADO */}
+      {/* ======================================================
+          ENCABEZADO
+      ====================================================== */}
+
       <div className="mb-8">
         <p className="text-sm font-semibold uppercase tracking-wider text-emerald-600">
           Aportaciones
@@ -249,79 +429,158 @@ export default function AportesRapidos() {
 
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
         <div className="space-y-6">
-          {/* BUSCADOR */}
+          {/* ==================================================
+              BUSCADOR
+          ================================================== */}
+
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <label className="mb-2 block text-sm font-semibold text-slate-700">
+            <label
+              htmlFor="buscar-campista"
+              className="mb-2 block text-sm font-semibold text-slate-700"
+            >
               Buscar campista
             </label>
 
             <div className="relative">
               <input
+                id="buscar-campista"
                 value={buscar}
                 onChange={(e) => {
-                  setBuscar(e.target.value);
+                  const valor =
+                    e.target.value;
 
-                  if (campistaSeleccionado) {
-                    setCampistaSeleccionado(null);
+                  setBuscar(valor);
+
+                  setCampistas([]);
+
+                  setBusquedaRealizada(
+                    false
+                  );
+
+                  setMensaje("");
+                  setError("");
+
+                  if (
+                    campistaSeleccionado
+                  ) {
+                    setCampistaSeleccionado(
+                      null
+                    );
                   }
                 }}
-                placeholder="Nombre o número de identidad..."
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                placeholder="Escribe el nombre del campista..."
+                autoComplete="off"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 pr-24 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               />
 
               {buscando && (
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-400">
-                  Buscando...
+                <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600" />
+
+                  <span className="text-xs font-medium text-slate-400">
+                    Buscando
+                  </span>
                 </div>
               )}
             </div>
 
-            {/* RESULTADOS */}
-            {campistas.length > 0 && (
-              <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
-                {campistas.map((campista) => (
-                  <button
-                    key={campista.id}
-                    type="button"
-                    onClick={() =>
-                      seleccionarCampista(campista)
-                    }
-                    className="flex w-full items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 text-left transition last:border-b-0 hover:bg-slate-50"
-                  >
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        {campista.nombre}
-                      </p>
+            <p className="mt-2 text-xs text-slate-400">
+              Escribe al menos 2 letras del nombre.
+            </p>
 
-                      <p className="mt-1 text-sm text-slate-500">
-                        {campista.identidad}
-
-                        {campista.iglesia
-                          ? ` • ${campista.iglesia}`
-                          : ""}
-                      </p>
-                    </div>
-
-                    <div className="shrink-0">
-                      {campista.inscripcion ? (
-                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                          Faltan L{" "}
-                          {campista.inscripcion.pendiente.toFixed(
-                            2
-                          )}
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                          Sin inscripción
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* ================================================
+                RESULTADOS
+            ================================================ */}
 
             {!buscando &&
+              campistas.length > 0 && (
+                <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
+                  {campistas.map(
+                    (campista) => (
+                      <button
+                        key={campista.id}
+                        type="button"
+                        onClick={() =>
+                          seleccionarCampista(
+                            campista
+                          )
+                        }
+                        className="flex w-full items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 text-left transition last:border-b-0 hover:bg-slate-50"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900">
+                            {
+                              campista.nombre
+                            }
+                          </p>
+
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500">
+                            {campista.codigo_campista && (
+                              <span className="font-mono font-semibold text-slate-600">
+                                {
+                                  campista.codigo_campista
+                                }
+                              </span>
+                            )}
+
+                            {campista.identidad && (
+                              <>
+                                {campista.codigo_campista && (
+                                  <span>
+                                    •
+                                  </span>
+                                )}
+
+                                <span>
+                                  {
+                                    campista.identidad
+                                  }
+                                </span>
+                              </>
+                            )}
+
+                            {campista.iglesia && (
+                              <>
+                                <span>
+                                  •
+                                </span>
+
+                                <span>
+                                  {
+                                    campista.iglesia
+                                  }
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="shrink-0">
+                          {campista.inscripcion ? (
+                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                              Faltan L{" "}
+                              {campista.inscripcion.pendiente.toFixed(
+                                2
+                              )}
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                              Sin inscripción
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  )}
+                </div>
+              )}
+
+            {/* ================================================
+                SIN RESULTADOS
+            ================================================ */}
+
+            {!buscando &&
+              busquedaRealizada &&
               buscar.trim().length >= 2 &&
               campistas.length === 0 &&
               !campistaSeleccionado && (
@@ -331,7 +590,10 @@ export default function AportesRapidos() {
               )}
           </div>
 
-          {/* CAMPISTA SELECCIONADO */}
+          {/* ==================================================
+              CAMPISTA SELECCIONADO
+          ================================================== */}
+
           {campistaSeleccionado && (
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -341,21 +603,47 @@ export default function AportesRapidos() {
                   </p>
 
                   <h2 className="mt-1 text-2xl font-bold text-slate-900">
-                    {campistaSeleccionado.nombre}
+                    {
+                      campistaSeleccionado.nombre
+                    }
                   </h2>
 
-                  <p className="mt-1 text-sm text-slate-500">
-                    {campistaSeleccionado.identidad}
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                    {campistaSeleccionado.codigo_campista && (
+                      <span className="rounded-lg bg-slate-100 px-2.5 py-1 font-mono font-semibold text-slate-700">
+                        {
+                          campistaSeleccionado.codigo_campista
+                        }
+                      </span>
+                    )}
 
-                    {campistaSeleccionado.iglesia
-                      ? ` • ${campistaSeleccionado.iglesia}`
-                      : ""}
-                  </p>
+                    {campistaSeleccionado.identidad && (
+                      <span>
+                        {
+                          campistaSeleccionado.identidad
+                        }
+                      </span>
+                    )}
+
+                    {campistaSeleccionado.iglesia && (
+                      <>
+                        <span>•</span>
+
+                        <span>
+                          {
+                            campistaSeleccionado.iglesia
+                          }
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 <button
                   type="button"
-                  onClick={limpiarSeleccion}
+                  onClick={
+                    limpiarSeleccion
+                  }
                   className="text-sm font-semibold text-slate-500 transition hover:text-slate-900"
                 >
                   Cambiar campista
@@ -377,7 +665,6 @@ export default function AportesRapidos() {
 
                   {/* RESUMEN */}
                   <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                    {/* META */}
                     <div className="rounded-xl bg-slate-50 p-4">
                       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
                         Meta
@@ -385,11 +672,12 @@ export default function AportesRapidos() {
 
                       <p className="mt-1 text-lg font-bold text-slate-900">
                         L{" "}
-                        {inscripcion.meta.toFixed(2)}
+                        {inscripcion.meta.toFixed(
+                          2
+                        )}
                       </p>
                     </div>
 
-                    {/* AHORRADO */}
                     <div className="rounded-xl bg-emerald-50 p-4">
                       <p className="text-xs font-medium uppercase tracking-wide text-emerald-600">
                         Ahorrado
@@ -403,7 +691,6 @@ export default function AportesRapidos() {
                       </p>
                     </div>
 
-                    {/* FALTA POR PAGAR */}
                     <div className="rounded-xl bg-amber-50 p-4">
                       <p className="text-xs font-medium uppercase tracking-wide text-amber-600">
                         Falta por pagar
@@ -428,7 +715,10 @@ export default function AportesRapidos() {
           )}
         </div>
 
-        {/* FORMULARIO */}
+        {/* ====================================================
+            FORMULARIO
+        ==================================================== */}
+
         <div>
           <div className="sticky top-24 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <h2 className="text-xl font-bold text-slate-900">
@@ -462,11 +752,14 @@ export default function AportesRapidos() {
                     step="0.01"
                     value={monto}
                     onChange={(e) =>
-                      setMonto(e.target.value)
+                      setMonto(
+                        e.target.value
+                      )
                     }
                     disabled={
                       !inscripcion ||
-                      inscripcion.pendiente <= 0
+                      inscripcion.pendiente <=
+                        0
                     }
                     placeholder="0.00"
                     className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-4 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
@@ -474,7 +767,8 @@ export default function AportesRapidos() {
                 </div>
 
                 {inscripcion &&
-                  inscripcion.pendiente > 0 && (
+                  inscripcion.pendiente >
+                    0 && (
                     <button
                       type="button"
                       onClick={() =>
@@ -503,14 +797,18 @@ export default function AportesRapidos() {
                 <select
                   value={metodoPago}
                   onChange={(e) => {
-                    const valor = e.target.value;
+                    const valor =
+                      e.target.value;
 
                     setMetodoPago(valor);
 
                     if (
-                      valor !== "TRANSFERENCIA"
+                      valor !==
+                      "TRANSFERENCIA"
                     ) {
-                      setBancoTransferencia("");
+                      setBancoTransferencia(
+                        ""
+                      );
                     }
                   }}
                   disabled={!inscripcion}
@@ -535,34 +833,41 @@ export default function AportesRapidos() {
               </div>
 
               {/* BANCO */}
-              {metodoPago === "TRANSFERENCIA" && (
+              {metodoPago ===
+                "TRANSFERENCIA" && (
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
                     Banco
                   </label>
 
                   <select
-                    value={bancoTransferencia}
+                    value={
+                      bancoTransferencia
+                    }
                     onChange={(e) =>
                       setBancoTransferencia(
                         e.target.value
                       )
                     }
-                    disabled={!inscripcion}
+                    disabled={
+                      !inscripcion
+                    }
                     className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
                   >
                     <option value="">
                       Seleccionar banco
                     </option>
 
-                    {bancos.map((banco) => (
-                      <option
-                        key={banco}
-                        value={banco}
-                      >
-                        {banco}
-                      </option>
-                    ))}
+                    {bancos.map(
+                      (banco) => (
+                        <option
+                          key={banco}
+                          value={banco}
+                        >
+                          {banco}
+                        </option>
+                      )
+                    )}
                   </select>
                 </div>
               )}
@@ -576,7 +881,9 @@ export default function AportesRapidos() {
                 <input
                   value={referencia}
                   onChange={(e) =>
-                    setReferencia(e.target.value)
+                    setReferencia(
+                      e.target.value
+                    )
                   }
                   disabled={!inscripcion}
                   placeholder="Opcional"
@@ -593,7 +900,9 @@ export default function AportesRapidos() {
                 <textarea
                   value={observacion}
                   onChange={(e) =>
-                    setObservacion(e.target.value)
+                    setObservacion(
+                      e.target.value
+                    )
                   }
                   disabled={!inscripcion}
                   rows={3}
@@ -622,7 +931,8 @@ export default function AportesRapidos() {
                 disabled={
                   guardando ||
                   !inscripcion ||
-                  inscripcion.pendiente <= 0
+                  inscripcion.pendiente <=
+                    0
                 }
                 className="w-full rounded-xl bg-emerald-600 px-4 py-3.5 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
               >

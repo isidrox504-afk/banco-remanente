@@ -8,6 +8,7 @@ import {
 
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { APP_CONFIG } from "@/lib/config/app";
 
 type Iglesia = {
   id: number;
@@ -55,7 +56,8 @@ export default function NuevoCampistaPage() {
   const [inscribirAhora, setInscribirAhora] =
     useState(false);
 
-  const [campamentoId, setCampamentoId] = useState("");
+  const [campamentoId, setCampamentoId] =
+    useState("");
 
   const [meta, setMeta] = useState("");
 
@@ -79,20 +81,41 @@ export default function NuevoCampistaPage() {
   const [codigoCampista, setCodigoCampista] =
     useState("");
 
-  const [campistaRegistrado, setCampistaRegistrado] =
-    useState("");
+  const [
+    campistaRegistrado,
+    setCampistaRegistrado,
+  ] = useState("");
 
-  const [inscripcionRealizada, setInscripcionRealizada] =
-    useState(false);
+  /*
+   * Guardamos también el teléfono utilizado al momento
+   * del registro.
+   *
+   * Así la pantalla de éxito no depende del formulario.
+   */
+  const [
+    telefonoRegistrado,
+    setTelefonoRegistrado,
+  ] = useState("");
 
-  const [inscripcionSolicitada, setInscripcionSolicitada] =
-    useState(false);
+  const [
+    inscripcionRealizada,
+    setInscripcionRealizada,
+  ] = useState(false);
 
-  const [errorInscripcion, setErrorInscripcion] =
-    useState("");
+  const [
+    inscripcionSolicitada,
+    setInscripcionSolicitada,
+  ] = useState(false);
 
-  const [campamentoRegistrado, setCampamentoRegistrado] =
-    useState("");
+  const [
+    errorInscripcion,
+    setErrorInscripcion,
+  ] = useState("");
+
+  const [
+    campamentoRegistrado,
+    setCampamentoRegistrado,
+  ] = useState("");
 
   const [metaRegistrada, setMetaRegistrada] =
     useState(0);
@@ -165,17 +188,13 @@ export default function NuevoCampistaPage() {
   function cambiarCampamento(id: string) {
     setCampamentoId(id);
 
-    const campamento =
-      campamentos.find(
-        (item) =>
-          item.id === Number(id)
-      );
+    const campamento = campamentos.find(
+      (item) => item.id === Number(id)
+    );
 
     if (campamento) {
       setMeta(
-        String(
-          campamento.precio_inscripcion
-        )
+        String(campamento.precio_inscripcion)
       );
     } else {
       setMeta("");
@@ -195,6 +214,75 @@ export default function NuevoCampistaPage() {
       setCampamentoId("");
       setMeta("");
     }
+  }
+
+  // ============================================================
+  // ABRIR WHATSAPP
+  // ============================================================
+
+  function enviarPorWhatsApp() {
+    if (!telefonoRegistrado) {
+      return;
+    }
+
+    /*
+     * Eliminamos guiones, espacios, paréntesis, etc.
+     *
+     * Ejemplo:
+     * 9999-9999 -> 99999999
+     */
+    let numero =
+      telefonoRegistrado.replace(/\D/g, "");
+
+    /*
+     * Para números hondureños de 8 dígitos
+     * agregamos automáticamente +504.
+     *
+     * Si el número ya viene como 50499999999,
+     * no agregamos nuevamente el código.
+     */
+    if (
+      numero.length === 8 &&
+      !numero.startsWith("504")
+    ) {
+      numero = `504${numero}`;
+    }
+
+    /*
+     * Mensaje base con las credenciales.
+     */
+    let mensaje =
+      `¡Hola ${campistaRegistrado}! 👋\n\n` +
+      `Tu registro en ${APP_CONFIG.nombre} fue creado correctamente.\n\n` +
+      `Estos son tus datos para consultar tu ahorro:\n\n` +
+      `Código de campista: ${codigoCampista}\n` +
+      `PIN de consulta: ${pinGenerado}\n`;
+
+    /*
+     * Si además quedó inscrito inmediatamente
+     * al campamento, incluimos esa información.
+     */
+    if (inscripcionRealizada) {
+      mensaje +=
+        `\nCampamento: ${campamentoRegistrado}\n` +
+        `Meta de ahorro: ${formatearMoneda(
+          metaRegistrada
+        )}\n`;
+    }
+
+    mensaje +=
+      `\nGuarda tu código y PIN, ya que los necesitarás para consultar tu ahorro.\n\n` +
+      `${APP_CONFIG.nombre}`;
+
+    const url =
+      `https://wa.me/${numero}` +
+      `?text=${encodeURIComponent(mensaje)}`;
+
+    window.open(
+      url,
+      "_blank",
+      "noopener,noreferrer"
+    );
   }
 
   // ============================================================
@@ -257,10 +345,7 @@ export default function NuevoCampistaPage() {
         return;
       }
 
-      if (
-        !meta ||
-        Number(meta) <= 0
-      ) {
+      if (!meta || Number(meta) <= 0) {
         setError(
           "Ingresa una meta de ahorro válida."
         );
@@ -270,46 +355,52 @@ export default function NuevoCampistaPage() {
 
     setGuardando(true);
 
+    /*
+     * Variable local importante:
+     *
+     * React actualiza campistaId de forma asíncrona.
+     * Esta variable nos permite saber inmediatamente
+     * si el campista ya fue creado.
+     */
+    let campistaCreado = false;
+
     try {
       // ========================================================
       // 1. CREAR CAMPISTA
       // ========================================================
 
-      const responseCampista =
-        await fetch(
-          "/api/campistas",
-          {
-            method: "POST",
+      const responseCampista = await fetch(
+        "/api/campistas",
+        {
+          method: "POST",
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
 
-            body: JSON.stringify({
-              identidad:
-                identidad.trim(),
+          body: JSON.stringify({
+            identidad:
+              identidad.trim(),
 
-              nombre:
-                nombre.trim(),
+            nombre:
+              nombre.trim(),
 
-              telefono:
-                telefono.trim(),
+            telefono:
+              telefono.trim(),
 
-              iglesia_id:
-                iglesiaId
-                  ? Number(
-                      iglesiaId
-                    )
-                  : null,
+            iglesia_id:
+              iglesiaId
+                ? Number(iglesiaId)
+                : null,
 
-              genero,
+            genero,
 
-              fecha_nacimiento:
-                fechaNacimiento,
-            }),
-          }
-        );
+            fecha_nacimiento:
+              fechaNacimiento,
+          }),
+        }
+      );
 
       const resultadoCampista =
         await responseCampista.json();
@@ -323,33 +414,30 @@ export default function NuevoCampistaPage() {
         return;
       }
 
-      const nuevoCampistaId =
-        Number(
-          resultadoCampista
-            .campista
-            .id
-        );
+      campistaCreado = true;
+
+      const nuevoCampistaId = Number(
+        resultadoCampista.campista.id
+      );
 
       const nuevoCodigo =
-        resultadoCampista
-          .codigo_campista ||
-        resultadoCampista
-          .campista
+        resultadoCampista.codigo_campista ||
+        resultadoCampista.campista
           .codigo_campista;
 
       const nuevoPin =
         resultadoCampista.pin;
 
-      // Guardamos inmediatamente los datos porque
-      // el campista YA fue creado.
+      // ========================================================
+      // GUARDAMOS LOS DATOS GENERADOS
+      // ========================================================
+
       setCampistaId(
         nuevoCampistaId
       );
 
       setCampistaRegistrado(
-        resultadoCampista
-          .campista
-          .nombre
+        resultadoCampista.campista.nombre
       );
 
       setCodigoCampista(
@@ -358,6 +446,10 @@ export default function NuevoCampistaPage() {
 
       setPinGenerado(
         nuevoPin
+      );
+
+      setTelefonoRegistrado(
+        telefono.trim()
       );
 
       setInscripcionSolicitada(
@@ -380,9 +472,7 @@ export default function NuevoCampistaPage() {
         campamentos.find(
           (campamento) =>
             campamento.id ===
-            Number(
-              campamentoId
-            )
+            Number(campamentoId)
         );
 
       const responseInscripcion =
@@ -401,9 +491,7 @@ export default function NuevoCampistaPage() {
                 nuevoCampistaId,
 
               campamento_id:
-                Number(
-                  campamentoId
-                ),
+                Number(campamentoId),
 
               meta:
                 Number(meta),
@@ -415,15 +503,6 @@ export default function NuevoCampistaPage() {
         await responseInscripcion.json();
 
       if (!responseInscripcion.ok) {
-        /*
-         * IMPORTANTE:
-         *
-         * El campista YA existe.
-         * Por eso NO mostramos el formulario otra vez.
-         *
-         * Mostraremos sus credenciales y avisaremos
-         * que solo falló la inscripción.
-         */
         setErrorInscripcion(
           resultadoInscripcion.error ||
             "El campista fue registrado, pero no se pudo completar la inscripción al campamento."
@@ -437,8 +516,7 @@ export default function NuevoCampistaPage() {
       );
 
       setCampamentoRegistrado(
-        campamentoSeleccionado
-          ?.nombre ||
+        campamentoSeleccionado?.nombre ||
           "Campamento seleccionado"
       );
 
@@ -446,12 +524,7 @@ export default function NuevoCampistaPage() {
         Number(meta)
       );
     } catch {
-      /*
-       * Si todavía no tenemos campistaId,
-       * significa que probablemente falló antes
-       * de crear el campista.
-       */
-      if (!campistaId) {
+      if (!campistaCreado) {
         setError(
           "No se pudo conectar con el servidor."
         );
@@ -482,6 +555,7 @@ export default function NuevoCampistaPage() {
       <div className="max-w-xl">
         <div className="rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm sm:p-8">
           {/* CABECERA */}
+
           <p className="text-sm font-semibold uppercase tracking-wide text-emerald-600">
             Campista registrado
           </p>
@@ -496,8 +570,10 @@ export default function NuevoCampistaPage() {
           </p>
 
           {/* CREDENCIALES */}
+
           <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200">
             {/* CÓDIGO */}
+
             <div className="bg-slate-50 p-6 text-center">
               <p className="text-sm font-medium text-slate-500">
                 Código de campista
@@ -509,6 +585,7 @@ export default function NuevoCampistaPage() {
             </div>
 
             {/* PIN */}
+
             <div className="border-t border-slate-200 bg-white p-6 text-center">
               <p className="text-sm font-medium text-slate-500">
                 PIN de consulta
@@ -521,6 +598,7 @@ export default function NuevoCampistaPage() {
           </div>
 
           {/* INSCRIPCIÓN EXITOSA */}
+
           {inscripcionSolicitada &&
             inscripcionRealizada && (
               <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
@@ -557,6 +635,7 @@ export default function NuevoCampistaPage() {
             )}
 
           {/* SIN INSCRIPCIÓN */}
+
           {!inscripcionSolicitada && (
             <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
               El campista fue registrado
@@ -568,6 +647,7 @@ export default function NuevoCampistaPage() {
           )}
 
           {/* ERROR SOLO EN INSCRIPCIÓN */}
+
           {errorInscripcion && (
             <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
               <p className="font-semibold text-amber-800">
@@ -589,6 +669,7 @@ export default function NuevoCampistaPage() {
           )}
 
           {/* AVISO */}
+
           <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-4 text-sm text-blue-700">
             Entrega el código de
             campista y el PIN. Estos
@@ -597,7 +678,38 @@ export default function NuevoCampistaPage() {
           </div>
 
           {/* BOTONES */}
+
           <div className="mt-6 space-y-3">
+            {/* WHATSAPP */}
+
+            {telefonoRegistrado ? (
+              <button
+                type="button"
+                onClick={
+                  enviarPorWhatsApp
+                }
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-green-700"
+              >
+                <span
+                  aria-hidden="true"
+                  className="text-lg"
+                >
+                  💬
+                </span>
+
+                Enviar datos por WhatsApp
+              </button>
+            ) : (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm text-amber-700">
+                No se registró un número
+                de teléfono. Los datos no
+                pueden enviarse por
+                WhatsApp.
+              </div>
+            )}
+
+            {/* COPIAR */}
+
             <button
               type="button"
               onClick={() => {
@@ -605,14 +717,14 @@ export default function NuevoCampistaPage() {
                   .writeText(
                     textoCredenciales
                   )
-                  .catch(
-                    () => {}
-                  );
+                  .catch(() => {});
               }}
               className="w-full rounded-xl border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               Copiar código y PIN
             </button>
+
+            {/* PERFIL */}
 
             {campistaId && (
               <Link
@@ -622,6 +734,8 @@ export default function NuevoCampistaPage() {
                 Ver perfil del campista
               </Link>
             )}
+
+            {/* FINALIZAR */}
 
             <Link
               href="/admin/campistas"
@@ -642,6 +756,7 @@ export default function NuevoCampistaPage() {
   return (
     <>
       {/* CABECERA */}
+
       <div className="mb-8">
         <Link
           href="/admin/campistas"
@@ -663,9 +778,7 @@ export default function NuevoCampistaPage() {
 
       <div className="max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <form
-          onSubmit={
-            guardarCampista
-          }
+          onSubmit={guardarCampista}
           className="space-y-8"
         >
           {/* ================================================== */}
@@ -686,6 +799,7 @@ export default function NuevoCampistaPage() {
 
             <div className="space-y-6">
               {/* IDENTIDAD */}
+
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
                   Número de identidad
@@ -693,9 +807,7 @@ export default function NuevoCampistaPage() {
 
                 <input
                   type="text"
-                  value={
-                    identidad
-                  }
+                  value={identidad}
                   onChange={(e) =>
                     setIdentidad(
                       e.target.value
@@ -713,6 +825,7 @@ export default function NuevoCampistaPage() {
               </div>
 
               {/* NOMBRE */}
+
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
                   Nombre completo *
@@ -720,9 +833,7 @@ export default function NuevoCampistaPage() {
 
                 <input
                   type="text"
-                  value={
-                    nombre
-                  }
+                  value={nombre}
                   onChange={(e) =>
                     setNombre(
                       e.target.value
@@ -735,6 +846,7 @@ export default function NuevoCampistaPage() {
               </div>
 
               {/* GENERO / FECHA */}
+
               <div className="grid gap-6 sm:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -742,9 +854,7 @@ export default function NuevoCampistaPage() {
                   </label>
 
                   <select
-                    value={
-                      genero
-                    }
+                    value={genero}
                     onChange={(e) =>
                       setGenero(
                         e.target.value
@@ -788,9 +898,7 @@ export default function NuevoCampistaPage() {
                     max={
                       new Date()
                         .toISOString()
-                        .split(
-                          "T"
-                        )[0]
+                        .split("T")[0]
                     }
                     className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                   />
@@ -798,6 +906,7 @@ export default function NuevoCampistaPage() {
               </div>
 
               {/* TELEFONO / IGLESIA */}
+
               <div className="grid gap-6 sm:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -806,9 +915,7 @@ export default function NuevoCampistaPage() {
 
                   <input
                     type="tel"
-                    value={
-                      telefono
-                    }
+                    value={telefono}
                     onChange={(e) =>
                       setTelefono(
                         e.target.value
@@ -817,6 +924,14 @@ export default function NuevoCampistaPage() {
                     placeholder="9999-9999"
                     className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                   />
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    Si registras un
+                    teléfono podrás enviar
+                    el código y PIN
+                    directamente por
+                    WhatsApp.
+                  </p>
                 </div>
 
                 <div>
@@ -825,9 +940,7 @@ export default function NuevoCampistaPage() {
                   </label>
 
                   <select
-                    value={
-                      iglesiaId
-                    }
+                    value={iglesiaId}
                     onChange={(e) =>
                       setIglesiaId(
                         e.target.value
@@ -845,16 +958,10 @@ export default function NuevoCampistaPage() {
                     </option>
 
                     {iglesias.map(
-                      (
-                        iglesia
-                      ) => (
+                      (iglesia) => (
                         <option
-                          key={
-                            iglesia.id
-                          }
-                          value={
-                            iglesia.id
-                          }
+                          key={iglesia.id}
+                          value={iglesia.id}
                         >
                           {
                             iglesia.nombre
@@ -888,7 +995,6 @@ export default function NuevoCampistaPage() {
               </p>
             </div>
 
-            {/* CHECK */}
             <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-emerald-200 hover:bg-emerald-50/30">
               <input
                 type="checkbox"
@@ -917,15 +1023,13 @@ export default function NuevoCampistaPage() {
               </div>
             </label>
 
-            {/* CAMPAMENTO */}
             {inscribirAhora && (
               <div className="mt-6 space-y-6">
                 {campamentos.length ===
                 0 ? (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                     <p className="font-semibold text-amber-800">
-                      No hay
-                      campamentos
+                      No hay campamentos
                       activos
                     </p>
 
@@ -948,6 +1052,7 @@ export default function NuevoCampistaPage() {
                 ) : (
                   <>
                     {/* SELECT CAMPAMENTO */}
+
                     <div>
                       <label className="mb-2 block text-sm font-semibold text-slate-700">
                         Campamento *
@@ -973,9 +1078,7 @@ export default function NuevoCampistaPage() {
                         </option>
 
                         {campamentos.map(
-                          (
-                            campamento
-                          ) => (
+                          (campamento) => (
                             <option
                               key={
                                 campamento.id
@@ -994,6 +1097,7 @@ export default function NuevoCampistaPage() {
                     </div>
 
                     {/* META */}
+
                     <div>
                       <label className="mb-2 block text-sm font-semibold text-slate-700">
                         Meta de ahorro *
@@ -1008,13 +1112,10 @@ export default function NuevoCampistaPage() {
                           type="number"
                           min="0.01"
                           step="0.01"
-                          value={
-                            meta
-                          }
+                          value={meta}
                           onChange={(e) =>
                             setMeta(
-                              e.target
-                                .value
+                              e.target.value
                             )
                           }
                           required={
@@ -1054,6 +1155,7 @@ export default function NuevoCampistaPage() {
           </div>
 
           {/* ERROR */}
+
           {error && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
@@ -1061,6 +1163,7 @@ export default function NuevoCampistaPage() {
           )}
 
           {/* BOTONES */}
+
           <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:justify-end">
             <Link
               href="/admin/campistas"

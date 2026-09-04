@@ -130,6 +130,7 @@ export async function PUT(
       .eq("id", id)
       .select(`
         id,
+        codigo_campista,
         identidad,
         nombre,
         telefono,
@@ -214,6 +215,7 @@ export async function PATCH(
       .eq("id", id)
       .select(`
         id,
+        codigo_campista,
         nombre,
         estado
       `)
@@ -239,6 +241,149 @@ export async function PATCH(
       {
         error:
           "Ocurrió un error al cambiar el estado del campista.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// ============================================================
+// ELIMINAR CAMPISTA COMPLETAMENTE
+// ============================================================
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params;
+
+    const campistaId = Number(id);
+
+    if (
+      !Number.isInteger(campistaId) ||
+      campistaId <= 0
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "El identificador del campista no es válido.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const supabase = await createClient();
+
+    // ========================================================
+    // VALIDAR SESIÓN
+    // ========================================================
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "No autorizado." },
+        { status: 401 }
+      );
+    }
+
+    // ========================================================
+    // VALIDAR QUE EL CAMPISTA EXISTA
+    // ========================================================
+
+    const {
+      data: campista,
+      error: errorCampista,
+    } = await supabase
+      .from("campistas")
+      .select(`
+        id,
+        nombre,
+        codigo_campista
+      `)
+      .eq("id", campistaId)
+      .maybeSingle();
+
+    if (errorCampista) {
+      console.error(
+        "Error buscando campista:",
+        errorCampista
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "No se pudo validar el campista.",
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!campista) {
+      return NextResponse.json(
+        {
+          error:
+            "El campista no existe.",
+        },
+        { status: 404 }
+      );
+    }
+
+    // ========================================================
+    // ELIMINAR TODO MEDIANTE RPC / TRANSACCIÓN
+    // ========================================================
+
+    const {
+      error: errorEliminacion,
+    } = await supabase.rpc(
+      "eliminar_campista_completo",
+      {
+        p_campista_id: campistaId,
+      }
+    );
+
+    if (errorEliminacion) {
+      console.error(
+        "Error eliminando campista:",
+        errorEliminacion
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "No se pudo eliminar completamente al campista.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // ========================================================
+    // RESPUESTA
+    // ========================================================
+
+    return NextResponse.json({
+      mensaje:
+        "Campista eliminado correctamente.",
+      campista: {
+        id: campista.id,
+        nombre: campista.nombre,
+        codigo_campista:
+          campista.codigo_campista,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Error eliminando campista:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          "Ocurrió un error al eliminar el campista.",
       },
       { status: 500 }
     );

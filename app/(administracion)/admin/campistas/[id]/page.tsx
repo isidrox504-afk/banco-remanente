@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import BotonEstado from "./BotonEstado";
+import BotonEliminarCampista from "./BotonEliminarCampista";
 
 export default async function DetalleCampistaPage({
   params,
@@ -12,10 +13,18 @@ export default async function DetalleCampistaPage({
 
   const supabase = await createClient();
 
-  const { data: campista, error: errorCampista } = await supabase
+  // ============================================================
+  // CAMPISTA
+  // ============================================================
+
+  const {
+    data: campista,
+    error: errorCampista,
+  } = await supabase
     .from("campistas")
     .select(`
       id,
+      codigo_campista,
       identidad,
       nombre,
       telefono,
@@ -32,11 +41,20 @@ export default async function DetalleCampistaPage({
     .eq("id", id)
     .single();
 
-  if (errorCampista || !campista) {
+  if (
+    errorCampista ||
+    !campista
+  ) {
     notFound();
   }
 
-  const { data: inscripcion } = await supabase
+  // ============================================================
+  // INSCRIPCIÓN ACTUAL
+  // ============================================================
+
+  const {
+    data: inscripcion,
+  } = await supabase
     .from("inscripciones")
     .select(`
       id,
@@ -49,11 +67,26 @@ export default async function DetalleCampistaPage({
         precio_inscripcion
       )
     `)
-    .eq("campista_id", campista.id)
-    .neq("estado", "CANCELADO")
-    .order("fecha_inscripcion", { ascending: false })
+    .eq(
+      "campista_id",
+      campista.id
+    )
+    .neq(
+      "estado",
+      "CANCELADO"
+    )
+    .order(
+      "fecha_inscripcion",
+      {
+        ascending: false,
+      }
+    )
     .limit(1)
     .maybeSingle();
+
+  // ============================================================
+  // APORTES
+  // ============================================================
 
   let aportes: Array<{
     id: number;
@@ -70,7 +103,9 @@ export default async function DetalleCampistaPage({
   let porcentaje = 0;
 
   if (inscripcion) {
-    const { data: aportesData } = await supabase
+    const {
+      data: aportesData,
+    } = await supabase
       .from("aportes")
       .select(`
         id,
@@ -81,46 +116,101 @@ export default async function DetalleCampistaPage({
         observacion,
         estado
       `)
-      .eq("inscripcion_id", inscripcion.id)
-      .eq("estado", "ACTIVO")
-      .order("fecha_aporte", { ascending: false });
+      .eq(
+        "inscripcion_id",
+        inscripcion.id
+      )
+      .eq(
+        "estado",
+        "ACTIVO"
+      )
+      .order(
+        "fecha_aporte",
+        {
+          ascending: false,
+        }
+      );
 
-    aportes = aportesData || [];
+    aportes =
+      aportesData || [];
 
-    totalAhorrado = aportes.reduce(
-      (total, aporte) => total + Number(aporte.monto),
-      0
-    );
+    totalAhorrado =
+      aportes.reduce(
+        (
+          total,
+          aporte
+        ) =>
+          total +
+          Number(
+            aporte.monto
+          ),
+        0
+      );
 
-    const meta = Number(inscripcion.meta);
+    const meta =
+      Number(
+        inscripcion.meta
+      );
 
-    pendiente = Math.max(meta - totalAhorrado, 0);
+    pendiente =
+      Math.max(
+        meta -
+          totalAhorrado,
+        0
+      );
 
     porcentaje =
       meta > 0
         ? Math.min(
-            Math.round((totalAhorrado / meta) * 100),
+            Math.round(
+              (totalAhorrado /
+                meta) *
+                100
+            ),
             100
           )
         : 0;
   }
 
-  const relacionCampamento = inscripcion?.campamentos;
+  // ============================================================
+  // NORMALIZAR RELACIONES
+  // ============================================================
 
-  const campamento = Array.isArray(relacionCampamento)
-    ? relacionCampamento[0]
-    : relacionCampamento;
+  const relacionCampamento =
+    inscripcion?.campamentos;
 
-  const relacionIglesia = campista.iglesias;
+  const campamento =
+    Array.isArray(
+      relacionCampamento
+    )
+      ? relacionCampamento[0]
+      : relacionCampamento;
 
-  const iglesia = Array.isArray(relacionIglesia)
-    ? relacionIglesia[0]
-    : relacionIglesia;
+  const relacionIglesia =
+    campista.iglesias;
 
-  const edad = calcularEdad(campista.fecha_nacimiento);
+  const iglesia =
+    Array.isArray(
+      relacionIglesia
+    )
+      ? relacionIglesia[0]
+      : relacionIglesia;
+
+  const edad =
+    calcularEdad(
+      campista.fecha_nacimiento
+    );
+
+  // ============================================================
+  // VISTA
+  // ============================================================
 
   return (
     <>
+      {/* ====================================================== */}
+      {/* CABECERA */}
+      {/* ====================================================== */}
+
       <div className="mb-8">
         <Link
           href="/admin/campistas"
@@ -132,28 +222,46 @@ export default async function DetalleCampistaPage({
         <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">
-              {campista.nombre}
+              {
+                campista.nombre
+              }
             </h1>
 
             <p className="mt-2 text-slate-500">
-              Información general y estado del ahorro.
+              Información general
+              y estado del ahorro.
             </p>
           </div>
 
           <span
             className={`inline-flex w-fit rounded-full px-4 py-2 text-sm font-semibold ${
-              campista.estado === "ACTIVO"
+              campista.estado ===
+              "ACTIVO"
                 ? "bg-emerald-50 text-emerald-700"
                 : "bg-slate-100 text-slate-600"
             }`}
           >
-            {campista.estado}
+            {
+              campista.estado
+            }
           </span>
         </div>
       </div>
 
+      {/* ====================================================== */}
+      {/* CONTENIDO */}
+      {/* ====================================================== */}
+
       <div className="grid gap-6 lg:grid-cols-3">
+        {/* ==================================================== */}
+        {/* COLUMNA PRINCIPAL */}
+        {/* ==================================================== */}
+
         <div className="space-y-6 lg:col-span-2">
+          {/* ================================================== */}
+          {/* DATOS PERSONALES */}
+          {/* ================================================== */}
+
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-900">
@@ -170,28 +278,54 @@ export default async function DetalleCampistaPage({
 
             <div className="grid gap-6 sm:grid-cols-2">
               <Dato
+                titulo="ID interno"
+                valor={`#${campista.id}`}
+              />
+
+              <Dato
+                titulo="Código de campista"
+                valor={
+                  campista.codigo_campista ||
+                  "No disponible"
+                }
+              />
+
+              <Dato
                 titulo="Número de identidad"
-                valor={campista.identidad}
+                valor={
+                  campista.identidad ||
+                  "No registrada"
+                }
               />
 
               <Dato
                 titulo="Nombre completo"
-                valor={campista.nombre}
+                valor={
+                  campista.nombre
+                }
               />
 
               <Dato
                 titulo="Teléfono"
-                valor={campista.telefono || "No registrado"}
+                valor={
+                  campista.telefono ||
+                  "No registrado"
+                }
               />
 
               <Dato
                 titulo="Iglesia"
-                valor={iglesia?.nombre || "No registrada"}
+                valor={
+                  iglesia?.nombre ||
+                  "No registrada"
+                }
               />
 
               <Dato
                 titulo="Género"
-                valor={formatearGenero(campista.genero)}
+                valor={formatearGenero(
+                  campista.genero
+                )}
               />
 
               <Dato
@@ -218,10 +352,16 @@ export default async function DetalleCampistaPage({
                 titulo="Fecha de registro"
                 valor={new Date(
                   campista.fecha_registro
-                ).toLocaleDateString("es-HN")}
+                ).toLocaleDateString(
+                  "es-HN"
+                )}
               />
             </div>
           </div>
+
+          {/* ================================================== */}
+          {/* AHORRO */}
+          {/* ================================================== */}
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -230,22 +370,28 @@ export default async function DetalleCampistaPage({
                   Ahorro
                 </h2>
 
-                {inscripcion && campamento && (
-                  <p className="mt-1 text-sm text-slate-500">
-                    {campamento.nombre}
-                  </p>
-                )}
+                {inscripcion &&
+                  campamento && (
+                    <p className="mt-1 text-sm text-slate-500">
+                      {
+                        campamento.nombre
+                      }
+                    </p>
+                  )}
               </div>
 
               {inscripcion && (
                 <span
                   className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${
-                    inscripcion.estado === "COMPLETO"
+                    inscripcion.estado ===
+                    "COMPLETO"
                       ? "bg-emerald-50 text-emerald-700"
                       : "bg-blue-50 text-blue-700"
                   }`}
                 >
-                  {inscripcion.estado}
+                  {
+                    inscripcion.estado
+                  }
                 </span>
               )}
             </div>
@@ -253,36 +399,49 @@ export default async function DetalleCampistaPage({
             {!inscripcion ? (
               <div className="mt-6 rounded-xl bg-slate-50 px-6 py-10 text-center">
                 <p className="text-sm text-slate-500">
-                  Este campista todavía no tiene una inscripción asociada.
+                  Este campista todavía
+                  no tiene una
+                  inscripción asociada.
                 </p>
 
                 <Link
                   href={`/admin/campistas/${campista.id}/inscribir`}
                   className="mt-5 inline-block rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
                 >
-                  Inscribir a campamento
+                  Inscribir a
+                  campamento
                 </Link>
               </div>
             ) : (
               <>
+                {/* RESUMEN */}
+
                 <div className="mt-6 grid gap-4 sm:grid-cols-3">
                   <Resumen
                     titulo="Meta"
                     valor={formatearMoneda(
-                      Number(inscripcion.meta)
+                      Number(
+                        inscripcion.meta
+                      )
                     )}
                   />
 
                   <Resumen
                     titulo="Ahorrado"
-                    valor={formatearMoneda(totalAhorrado)}
+                    valor={formatearMoneda(
+                      totalAhorrado
+                    )}
                   />
 
                   <Resumen
                     titulo="Pendiente"
-                    valor={formatearMoneda(pendiente)}
+                    valor={formatearMoneda(
+                      pendiente
+                    )}
                   />
                 </div>
+
+                {/* PROGRESO */}
 
                 <div className="mt-6">
                   <div className="mb-2 flex items-center justify-between">
@@ -291,20 +450,28 @@ export default async function DetalleCampistaPage({
                     </p>
 
                     <p className="text-sm font-bold text-slate-900">
-                      {porcentaje}%
+                      {
+                        porcentaje
+                      }
+                      %
                     </p>
                   </div>
 
                   <div className="h-3 overflow-hidden rounded-full bg-slate-100">
                     <div
                       className="h-full rounded-full bg-emerald-600"
-                      style={{ width: `${porcentaje}%` }}
+                      style={{
+                        width: `${porcentaje}%`,
+                      }}
                     />
                   </div>
                 </div>
 
+                {/* REGISTRAR APORTE */}
+
                 <div className="mt-6">
-                  {inscripcion.estado !== "COMPLETO" ? (
+                  {inscripcion.estado !==
+                  "COMPLETO" ? (
                     <Link
                       href={`/admin/campistas/${campista.id}/aporte`}
                       className="inline-block rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
@@ -313,13 +480,18 @@ export default async function DetalleCampistaPage({
                     </Link>
                   ) : (
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-                      Meta de ahorro completada.
+                      Meta de ahorro
+                      completada.
                     </div>
                   )}
                 </div>
               </>
             )}
           </div>
+
+          {/* ================================================== */}
+          {/* HISTORIAL */}
+          {/* ================================================== */}
 
           {inscripcion && (
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -328,12 +500,15 @@ export default async function DetalleCampistaPage({
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Movimientos registrados para esta inscripción.
+                Movimientos registrados
+                para esta inscripción.
               </p>
 
-              {aportes.length === 0 ? (
+              {aportes.length ===
+              0 ? (
                 <div className="mt-6 rounded-xl bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
-                  Todavía no hay aportes registrados.
+                  Todavía no hay
+                  aportes registrados.
                 </div>
               ) : (
                 <div className="mt-6 overflow-x-auto">
@@ -359,31 +534,44 @@ export default async function DetalleCampistaPage({
                     </thead>
 
                     <tbody className="divide-y divide-slate-100">
-                      {aportes.map((aporte) => (
-                        <tr key={aporte.id}>
-                          <td className="py-4 text-sm text-slate-600">
-                            {new Date(
-                              aporte.fecha_aporte
-                            ).toLocaleDateString("es-HN")}
-                          </td>
+                      {aportes.map(
+                        (
+                          aporte
+                        ) => (
+                          <tr
+                            key={
+                              aporte.id
+                            }
+                          >
+                            <td className="py-4 text-sm text-slate-600">
+                              {new Date(
+                                aporte.fecha_aporte
+                              ).toLocaleDateString(
+                                "es-HN"
+                              )}
+                            </td>
 
-                          <td className="py-4 text-sm text-slate-600">
-                            {formatearMetodo(
-                              aporte.metodo_pago
-                            )}
-                          </td>
+                            <td className="py-4 text-sm text-slate-600">
+                              {formatearMetodo(
+                                aporte.metodo_pago
+                              )}
+                            </td>
 
-                          <td className="py-4 text-sm text-slate-600">
-                            {aporte.referencia || "-"}
-                          </td>
+                            <td className="py-4 text-sm text-slate-600">
+                              {aporte.referencia ||
+                                "-"}
+                            </td>
 
-                          <td className="py-4 text-right text-sm font-semibold text-slate-900">
-                            {formatearMoneda(
-                              Number(aporte.monto)
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                            <td className="py-4 text-right text-sm font-semibold text-slate-900">
+                              {formatearMoneda(
+                                Number(
+                                  aporte.monto
+                                )
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -392,17 +580,44 @@ export default async function DetalleCampistaPage({
           )}
         </div>
 
+        {/* ==================================================== */}
+        {/* COLUMNA LATERAL */}
+        {/* ==================================================== */}
+
         <div className="space-y-6">
+          {/* ================================================== */}
+          {/* SEGURIDAD */}
+          {/* ================================================== */}
+
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">
               Seguridad de consulta
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              El campista utiliza su identidad y un PIN para consultar su ahorro.
+              El campista utiliza su
+              código de campista y un
+              PIN para consultar su
+              ahorro.
             </p>
 
+            {/* CÓDIGO */}
+
             <div className="mt-5 rounded-xl bg-slate-50 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Código de campista
+              </p>
+
+              <p className="mt-2 font-mono text-lg font-bold text-slate-900">
+                {
+                  campista.codigo_campista
+                }
+              </p>
+            </div>
+
+            {/* PIN */}
+
+            <div className="mt-3 rounded-xl bg-slate-50 p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                 PIN
               </p>
@@ -420,18 +635,57 @@ export default async function DetalleCampistaPage({
             </Link>
           </div>
 
+          {/* ================================================== */}
+          {/* ESTADO */}
+          {/* ================================================== */}
+
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">
               Estado
             </h2>
 
             <p className="mt-2 text-sm text-slate-500">
-              Puedes desactivar al campista sin eliminar su historial.
+              Puedes desactivar al
+              campista sin eliminar su
+              historial.
             </p>
 
             <BotonEstado
-              id={campista.id}
-              estadoActual={campista.estado}
+              id={
+                campista.id
+              }
+              estadoActual={
+                campista.estado
+              }
+            />
+          </div>
+
+          {/* ================================================== */}
+          {/* ZONA DE PELIGRO */}
+          {/* ================================================== */}
+
+          <div className="rounded-2xl border border-red-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-red-700">
+              Zona de peligro
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Eliminar un campista
+              borrará permanentemente
+              sus datos, inscripciones
+              y aportes.
+            </p>
+
+            <BotonEliminarCampista
+              id={
+                campista.id
+              }
+              nombre={
+                campista.nombre
+              }
+              codigoCampista={
+                campista.codigo_campista
+              }
             />
           </div>
         </div>
@@ -440,12 +694,20 @@ export default async function DetalleCampistaPage({
   );
 }
 
+// ============================================================
+// DATO
+// ============================================================
+
 function Dato({
   titulo,
   valor,
 }: {
   titulo: string;
-  valor: string;
+  valor:
+    | string
+    | number
+    | null
+    | undefined;
 }) {
   return (
     <div>
@@ -454,11 +716,16 @@ function Dato({
       </p>
 
       <p className="mt-2 text-sm font-medium text-slate-900">
-        {valor}
+        {valor ??
+          "No registrado"}
       </p>
     </div>
   );
 }
+
+// ============================================================
+// RESUMEN
+// ============================================================
 
 function Resumen({
   titulo,
@@ -480,19 +747,38 @@ function Resumen({
   );
 }
 
-function calcularEdad(fecha: string | null) {
-  if (!fecha) return null;
+// ============================================================
+// CALCULAR EDAD
+// ============================================================
 
-  const nacimiento = new Date(`${fecha}T00:00:00`);
-  const hoy = new Date();
+function calcularEdad(
+  fecha: string | null
+) {
+  if (!fecha) {
+    return null;
+  }
 
-  let edad = hoy.getFullYear() - nacimiento.getFullYear();
+  const nacimiento =
+    new Date(
+      `${fecha}T00:00:00`
+    );
 
-  const mes = hoy.getMonth() - nacimiento.getMonth();
+  const hoy =
+    new Date();
+
+  let edad =
+    hoy.getFullYear() -
+    nacimiento.getFullYear();
+
+  const mes =
+    hoy.getMonth() -
+    nacimiento.getMonth();
 
   if (
     mes < 0 ||
-    (mes === 0 && hoy.getDate() < nacimiento.getDate())
+    (mes === 0 &&
+      hoy.getDate() <
+        nacimiento.getDate())
   ) {
     edad--;
   }
@@ -500,35 +786,90 @@ function calcularEdad(fecha: string | null) {
   return edad;
 }
 
-function formatearFechaNacimiento(fecha: string) {
-  return new Date(`${fecha}T00:00:00`).toLocaleDateString(
+// ============================================================
+// FORMATEAR FECHA
+// ============================================================
+
+function formatearFechaNacimiento(
+  fecha: string
+) {
+  return new Date(
+    `${fecha}T00:00:00`
+  ).toLocaleDateString(
     "es-HN"
   );
 }
 
-function formatearGenero(genero: string | null) {
-  if (genero === "MASCULINO") return "Masculino";
-  if (genero === "FEMENINO") return "Femenino";
+// ============================================================
+// FORMATEAR GÉNERO
+// ============================================================
+
+function formatearGenero(
+  genero: string | null
+) {
+  if (
+    genero ===
+    "MASCULINO"
+  ) {
+    return "Masculino";
+  }
+
+  if (
+    genero ===
+    "FEMENINO"
+  ) {
+    return "Femenino";
+  }
 
   return "No registrado";
 }
 
-function formatearMoneda(valor: number) {
-  return `L ${valor.toLocaleString("es-HN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+// ============================================================
+// FORMATEAR MONEDA
+// ============================================================
+
+function formatearMoneda(
+  valor: number
+) {
+  return `L ${valor.toLocaleString(
+    "es-HN",
+    {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }
+  )}`;
 }
 
-function formatearMetodo(metodo: string | null) {
-  if (!metodo) return "-";
+// ============================================================
+// FORMATEAR MÉTODO
+// ============================================================
 
-  const metodos: Record<string, string> = {
-    EFECTIVO: "Efectivo",
-    TRANSFERENCIA: "Transferencia",
-    DEPOSITO: "Depósito",
-    OTRO: "Otro",
+function formatearMetodo(
+  metodo: string | null
+) {
+  if (!metodo) {
+    return "-";
+  }
+
+  const metodos: Record<
+    string,
+    string
+  > = {
+    EFECTIVO:
+      "Efectivo",
+
+    TRANSFERENCIA:
+      "Transferencia",
+
+    DEPOSITO:
+      "Depósito",
+
+    OTRO:
+      "Otro",
   };
 
-  return metodos[metodo] || metodo;
+  return (
+    metodos[metodo] ||
+    metodo
+  );
 }
