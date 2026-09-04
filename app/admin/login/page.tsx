@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -31,9 +32,7 @@ export default function LoginAdmin() {
       });
 
     if (error) {
-      setError(
-        "Correo o contraseña incorrectos."
-      );
+      setError("Correo o contraseña incorrectos.");
       setCargando(false);
       return;
     }
@@ -45,20 +44,37 @@ export default function LoginAdmin() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6 py-10">
       <div className="w-full max-w-md">
+        {/* VOLVER AL INICIO */}
+        <div className="mb-6">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-emerald-700"
+          >
+            <span>←</span>
+            Volver al inicio
+          </Link>
+        </div>
+
         {/* ENCABEZADO */}
         <div className="mb-8 text-center">
           {/* LOGO */}
           <div className="mb-6 flex justify-center">
-            <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-2xl bg-white p-2 shadow-sm ring-1 ring-slate-200">
-              <Image
-                src={APP_CONFIG.logo}
-                alt={`Logo ${APP_CONFIG.nombre}`}
-                width={112}
-                height={112}
-                className="h-full w-full object-contain"
-                priority
-              />
-            </div>
+            <Link
+              href="/"
+              aria-label="Volver al inicio"
+              className="block"
+            >
+              <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-2xl bg-white p-2 shadow-sm ring-1 ring-slate-200 transition hover:shadow-md">
+                <Image
+                  src={APP_CONFIG.logo}
+                  alt={`Logo ${APP_CONFIG.nombre}`}
+                  width={112}
+                  height={112}
+                  className="h-full w-full object-contain"
+                  priority
+                />
+              </div>
+            </Link>
           </div>
 
           {/* NOMBRE DEL BANCO */}
@@ -71,8 +87,8 @@ export default function LoginAdmin() {
           </h1>
 
           <p className="mt-3 text-slate-500">
-            Ingresa tus credenciales para
-            administrar {APP_CONFIG.nombre}.
+            Ingresa tus credenciales para administrar{" "}
+            {APP_CONFIG.nombre}.
           </p>
         </div>
 
