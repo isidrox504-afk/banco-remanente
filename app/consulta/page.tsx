@@ -2,11 +2,13 @@
 
 import {
   FormEvent,
+  useEffect,
   useState,
 } from "react";
 
 import Link from "next/link";
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 
 import { APP_CONFIG } from "@/lib/config/app";
 
@@ -44,6 +46,12 @@ type ResultadoConsulta = {
 };
 
 export default function ConsultaPage() {
+  const searchParams =
+    useSearchParams();
+
+  const codigoDesdeUrl =
+    searchParams.get("codigo");
+
   const [
     codigoCampista,
     setCodigoCampista,
@@ -84,6 +92,22 @@ export default function ConsultaPage() {
     mensajeActualizacion,
     setMensajeActualizacion,
   ] = useState("");
+
+  // ============================================================
+  // CARGAR CÓDIGO DESDE LA URL
+  // ============================================================
+
+  useEffect(() => {
+    if (!codigoDesdeUrl) {
+      return;
+    }
+
+    setCodigoCampista(
+      codigoDesdeUrl
+        .trim()
+        .toUpperCase()
+    );
+  }, [codigoDesdeUrl]);
 
   // ============================================================
   // CONSULTAR
@@ -848,8 +872,9 @@ export default function ConsultaPage() {
               />
 
               <p className="mt-2 text-xs text-slate-400">
-                Ejemplo:
-                CAM-000158
+                {codigoDesdeUrl
+                  ? "Tu código fue cargado automáticamente desde el enlace."
+                  : "Ejemplo: CAM-000158"}
               </p>
             </div>
 

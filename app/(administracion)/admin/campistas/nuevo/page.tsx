@@ -219,67 +219,63 @@ export default function NuevoCampistaPage() {
   // ============================================================
   // ABRIR WHATSAPP
   // ============================================================
-
   function enviarPorWhatsApp() {
     if (!telefonoRegistrado) {
       return;
     }
 
-    /*
-     * Eliminamos guiones, espacios, paréntesis, etc.
-     *
-     * Ejemplo:
-     * 9999-9999 -> 99999999
-     */
     let numero =
       telefonoRegistrado.replace(/\D/g, "");
 
-    /*
-     * Para números hondureños de 8 dígitos
-     * agregamos automáticamente +504.
-     *
-     * Si el número ya viene como 50499999999,
-     * no agregamos nuevamente el código.
-     */
-    if (
-      numero.length === 8 &&
-      !numero.startsWith("504")
-    ) {
+    // Agregar código de país de Honduras
+    if (numero.length === 8) {
       numero = `504${numero}`;
     }
 
-    /*
-     * Mensaje base con las credenciales.
-     */
-    let mensaje =
-      `¡Hola ${campistaRegistrado}! 👋\n\n` +
-      `Tu registro en ${APP_CONFIG.nombre} fue creado correctamente.\n\n` +
-      `Estos son tus datos para consultar tu ahorro:\n\n` +
-      `Código de campista: ${codigoCampista}\n` +
-      `PIN de consulta: ${pinGenerado}\n`;
+    // El código del campista viaja en la URL.
+    // El PIN NO se coloca en la URL.
+    const urlConsulta =
+      `${window.location.origin}/consulta?codigo=${encodeURIComponent(
+        codigoCampista
+      )}`;
 
-    /*
-     * Si además quedó inscrito inmediatamente
-     * al campamento, incluimos esa información.
-     */
+    let mensaje =
+      `Hola ${campistaRegistrado}\n\n` +
+      `Tu registro en ${APP_CONFIG.nombre} fue creado correctamente.\n\n` +
+
+      `*Código de campista*\n` +
+      `${codigoCampista}\n\n` +
+
+      `*PIN de consulta*\n` +
+      `${pinGenerado}\n\n`;
+
     if (inscripcionRealizada) {
       mensaje +=
-        `\nCampamento: ${campamentoRegistrado}\n` +
-        `Meta de ahorro: ${formatearMoneda(
-          metaRegistrada
-        )}\n`;
+        `*Campamento*\n` +
+        `${campamentoRegistrado}\n\n` +
+
+        `*Meta de ahorro*\n` +
+        `${formatearMoneda(metaRegistrada)}\n\n`;
     }
 
     mensaje +=
-      `\nGuarda tu código y PIN, ya que los necesitarás para consultar tu ahorro.\n\n` +
+      `*Consultar mi ahorro*\n` +
+      `${urlConsulta}\n\n` +
+
+      `Al abrir el enlace, tu código de campista ya aparecerá escrito.\n` +
+      `Solo debes ingresar tu PIN de 6 dígitos.\n\n` +
+
+      `Guarda este mensaje, ya que contiene tus credenciales de consulta.\n\n` +
+
       `${APP_CONFIG.nombre}`;
 
-    const url =
-      `https://wa.me/${numero}` +
-      `?text=${encodeURIComponent(mensaje)}`;
+    const urlWhatsApp =
+      `https://wa.me/${numero}?text=${encodeURIComponent(
+        mensaje
+      )}`;
 
     window.open(
-      url,
+      urlWhatsApp,
       "_blank",
       "noopener,noreferrer"
     );

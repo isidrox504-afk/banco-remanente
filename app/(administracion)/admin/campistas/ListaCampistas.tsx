@@ -1,7 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import {
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
+import { useRouter } from "next/navigation";
 
 type Iglesia = {
   id: number;
@@ -15,11 +20,8 @@ type EstadoPago =
 
 type Campista = {
   id: number;
-
-  codigo_campista: string;
-
+  codigo_campista: string | null;
   identidad: string | null;
-
   nombre: string;
   telefono: string | null;
   genero: string | null;
@@ -28,7 +30,10 @@ type Campista = {
   fecha_registro: string;
   iglesia_id: number | null;
 
-  iglesias: Iglesia | Iglesia[] | null;
+  iglesias:
+    | Iglesia
+    | Iglesia[]
+    | null;
 
   campamento: string | null;
 
@@ -44,11 +49,19 @@ export default function ListaCampistas({
 }: {
   campistas: Campista[];
 }) {
+  const router = useRouter();
+
+  const [
+    actualizando,
+    iniciarActualizacion,
+  ] = useTransition();
+
   // ==========================================================
   // FILTROS
   // ==========================================================
 
-  const [busqueda, setBusqueda] = useState("");
+  const [busqueda, setBusqueda] =
+    useState("");
 
   const [estado, setEstado] =
     useState("TODOS");
@@ -59,8 +72,24 @@ export default function ListaCampistas({
   const [iglesiaId, setIglesiaId] =
     useState("TODAS");
 
-  const [estadoPago, setEstadoPago] =
-    useState("TODOS");
+  const [
+    estadoPago,
+    setEstadoPago,
+  ] = useState("TODOS");
+
+  // ==========================================================
+  // ORDENAR CAMPISTAS
+  // NUEVOS PRIMERO
+  // ==========================================================
+
+  const campistasOrdenados =
+    useMemo(() => {
+      return [...campistas].sort(
+        (a, b) =>
+          Number(b.id) -
+          Number(a.id)
+      );
+    }, [campistas]);
 
   // ==========================================================
   // CATÁLOGO DE IGLESIAS
@@ -70,7 +99,7 @@ export default function ListaCampistas({
     const mapa =
       new Map<number, Iglesia>();
 
-    campistas.forEach(
+    campistasOrdenados.forEach(
       (campista) => {
         const iglesia =
           obtenerIglesia(
@@ -94,7 +123,7 @@ export default function ListaCampistas({
         "es"
       )
     );
-  }, [campistas]);
+  }, [campistasOrdenados]);
 
   // ==========================================================
   // FILTRAR CAMPISTAS
@@ -105,79 +134,80 @@ export default function ListaCampistas({
       const texto =
         normalizar(busqueda);
 
-      return campistas.filter(
+      return campistasOrdenados.filter(
         (campista) => {
           const iglesia =
             obtenerIglesia(
               campista.iglesias
             );
 
-          // ----------------------------------------------
-          // BÚSQUEDA
-          // ----------------------------------------------
-
           const id =
-            String(
+            normalizar(
               campista.id
             );
 
           const codigo =
-            campista.codigo_campista ||
-            "";
+            normalizar(
+              campista.codigo_campista
+            );
 
           const identidad =
-            campista.identidad ||
-            "";
+            normalizar(
+              campista.identidad
+            );
+
+          const nombre =
+            normalizar(
+              campista.nombre
+            );
+
+          // ==================================================
+          // BÚSQUEDA
+          // ==================================================
 
           const coincideBusqueda =
             texto === "" ||
-            normalizar(
-              campista.nombre
-            ).includes(texto) ||
-            normalizar(
-              codigo
-            ).includes(texto) ||
-            normalizar(
-              identidad
-            ).includes(texto) ||
-            normalizar(
-              id
-            ).includes(texto);
+            id.includes(texto) ||
+            codigo.includes(texto) ||
+            nombre.includes(texto) ||
+            identidad.includes(texto);
 
-          // ----------------------------------------------
-          // ESTADO CAMPISTA
-          // ----------------------------------------------
+          // ==================================================
+          // ESTADO
+          // ==================================================
 
           const coincideEstado =
             estado === "TODOS" ||
             campista.estado ===
               estado;
 
-          // ----------------------------------------------
+          // ==================================================
           // GÉNERO
-          // ----------------------------------------------
+          // ==================================================
 
           const coincideGenero =
             genero === "TODOS" ||
             campista.genero ===
               genero;
 
-          // ----------------------------------------------
+          // ==================================================
           // IGLESIA
-          // ----------------------------------------------
+          // ==================================================
 
           const coincideIglesia =
-            iglesiaId === "TODAS" ||
+            iglesiaId ===
+              "TODAS" ||
             String(
-              iglesia?.id || ""
+              iglesia?.id ?? ""
             ) === iglesiaId;
 
-          // ----------------------------------------------
+          // ==================================================
           // ESTADO DE PAGO
-          // ----------------------------------------------
+          // ==================================================
 
           const coincideEstadoPago =
-            estadoPago === "TODOS" ||
+            estadoPago ===
+              "TODOS" ||
             campista.estado_pago ===
               estadoPago;
 
@@ -191,7 +221,7 @@ export default function ListaCampistas({
         }
       );
     }, [
-      campistas,
+      campistasOrdenados,
       busqueda,
       estado,
       genero,
@@ -200,26 +230,26 @@ export default function ListaCampistas({
     ]);
 
   // ==========================================================
-  // RESUMEN DE PAGOS
+  // RESUMEN
   // ==========================================================
 
   const resumen = useMemo(() => {
     const completos =
-      campistas.filter(
+      campistasOrdenados.filter(
         (campista) =>
           campista.estado_pago ===
           "COMPLETO"
       ).length;
 
     const pendientes =
-      campistas.filter(
+      campistasOrdenados.filter(
         (campista) =>
           campista.estado_pago ===
           "PENDIENTE"
       ).length;
 
     const sinInscripcion =
-      campistas.filter(
+      campistasOrdenados.filter(
         (campista) =>
           campista.estado_pago ===
           "SIN_INSCRIPCION"
@@ -230,14 +260,14 @@ export default function ListaCampistas({
       pendientes,
       sinInscripcion,
     };
-  }, [campistas]);
+  }, [campistasOrdenados]);
 
   // ==========================================================
-  // SABER SI HAY FILTROS
+  // FILTROS ACTIVOS
   // ==========================================================
 
   const hayFiltros =
-    busqueda !== "" ||
+    busqueda.trim() !== "" ||
     estado !== "TODOS" ||
     genero !== "TODOS" ||
     iglesiaId !== "TODAS" ||
@@ -255,6 +285,16 @@ export default function ListaCampistas({
     setEstadoPago("TODOS");
   }
 
+  // ==========================================================
+  // ACTUALIZAR LISTADO
+  // ==========================================================
+
+  function actualizarListado() {
+    iniciarActualizacion(() => {
+      router.refresh();
+    });
+  }
+
   return (
     <>
       {/* ======================================================
@@ -262,7 +302,6 @@ export default function ListaCampistas({
       ====================================================== */}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        {/* COMPLETOS */}
         <button
           type="button"
           onClick={() =>
@@ -285,7 +324,6 @@ export default function ListaCampistas({
           </p>
         </button>
 
-        {/* PENDIENTES */}
         <button
           type="button"
           onClick={() =>
@@ -308,7 +346,6 @@ export default function ListaCampistas({
           </p>
         </button>
 
-        {/* SIN INSCRIPCIÓN */}
         <button
           type="button"
           onClick={() =>
@@ -339,8 +376,49 @@ export default function ListaCampistas({
       ====================================================== */}
 
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {/* CABECERA */}
+
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-semibold text-slate-900">
+              Buscar y filtrar
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Busca por ID, código,
+              nombre o identidad.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={
+              actualizarListado
+            }
+            disabled={
+              actualizando
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <span
+              className={
+                actualizando
+                  ? "animate-spin"
+                  : ""
+              }
+            >
+              ↻
+            </span>
+
+            {actualizando
+              ? "Actualizando..."
+              : "Actualizar"}
+          </button>
+        </div>
+
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {/* BUSCADOR */}
+
           <div className="md:col-span-2">
             <label
               htmlFor="busqueda"
@@ -359,7 +437,7 @@ export default function ListaCampistas({
                     e.target.value
                   )
                 }
-                placeholder="ID, código, nombre o identidad..."
+                placeholder="Ej: 158, CAM-000158 o Juan Pérez"
                 autoComplete="off"
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 pr-10 text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               />
@@ -379,13 +457,14 @@ export default function ListaCampistas({
             </div>
 
             <p className="mt-2 text-xs text-slate-400">
-              Puedes buscar por ID,
-              código CAM, nombre o
-              identidad.
+              Puedes buscar por ID
+              interno, código CAM,
+              nombre o identidad.
             </p>
           </div>
 
           {/* ESTADO */}
+
           <div>
             <label
               htmlFor="estado"
@@ -419,6 +498,7 @@ export default function ListaCampistas({
           </div>
 
           {/* GÉNERO */}
+
           <div>
             <label
               htmlFor="genero"
@@ -452,6 +532,7 @@ export default function ListaCampistas({
           </div>
 
           {/* ESTADO DE PAGO */}
+
           <div>
             <label
               htmlFor="estadoPago"
@@ -490,8 +571,8 @@ export default function ListaCampistas({
         </div>
 
         {/* SEGUNDA FILA */}
+
         <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          {/* IGLESIA */}
           <div className="w-full sm:max-w-sm">
             <label
               htmlFor="iglesia"
@@ -533,7 +614,6 @@ export default function ListaCampistas({
             </select>
           </div>
 
-          {/* LIMPIAR */}
           {hayFiltros && (
             <button
               type="button"
@@ -548,6 +628,7 @@ export default function ListaCampistas({
         </div>
 
         {/* RESULTADOS */}
+
         <div className="mt-5 border-t border-slate-100 pt-4">
           <p className="text-sm text-slate-500">
             Mostrando{" "}
@@ -559,7 +640,7 @@ export default function ListaCampistas({
             de{" "}
             <span className="font-semibold text-slate-900">
               {
-                campistas.length
+                campistasOrdenados.length
               }
             </span>{" "}
             campistas
@@ -578,47 +659,38 @@ export default function ListaCampistas({
             <table className="w-full">
               <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
-                  {/* ID */}
                   <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     ID
                   </th>
 
-                  {/* CÓDIGO */}
                   <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Código
                   </th>
 
-                  {/* CAMPISTA */}
                   <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Campista
                   </th>
 
-                  {/* IGLESIA */}
                   <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Iglesia
                   </th>
 
-                  {/* CAMPAMENTO */}
                   <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Campamento
                   </th>
 
-                  {/* ESTADO PAGO */}
                   <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Estado pago
                   </th>
 
-                  {/* AHORRADO */}
                   <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Ahorrado
                   </th>
 
-                  {/* FALTA */}
                   <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Falta por pagar
                   </th>
 
-                  {/* ACCIÓN */}
                   <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Acción
                   </th>
@@ -640,9 +712,7 @@ export default function ListaCampistas({
                         }
                         className="transition hover:bg-slate-50"
                       >
-                        {/* ============================== */}
                         {/* ID */}
-                        {/* ============================== */}
 
                         <td className="whitespace-nowrap px-4 py-4">
                           <span className="text-sm font-bold text-slate-600">
@@ -653,9 +723,7 @@ export default function ListaCampistas({
                           </span>
                         </td>
 
-                        {/* ============================== */}
-                        {/* CÓDIGO CAMPISTA */}
-                        {/* ============================== */}
+                        {/* CÓDIGO */}
 
                         <td className="whitespace-nowrap px-4 py-4">
                           <span className="inline-flex rounded-lg bg-slate-100 px-3 py-1.5 font-mono text-xs font-bold tracking-wide text-slate-700">
@@ -664,9 +732,7 @@ export default function ListaCampistas({
                           </span>
                         </td>
 
-                        {/* ============================== */}
                         {/* CAMPISTA */}
-                        {/* ============================== */}
 
                         <td className="px-5 py-4">
                           <p className="text-sm font-semibold text-slate-900">
@@ -690,18 +756,14 @@ export default function ListaCampistas({
                           )}
                         </td>
 
-                        {/* ============================== */}
                         {/* IGLESIA */}
-                        {/* ============================== */}
 
                         <td className="px-5 py-4 text-sm text-slate-600">
                           {iglesia?.nombre ||
                             "Sin iglesia"}
                         </td>
 
-                        {/* ============================== */}
                         {/* CAMPAMENTO */}
-                        {/* ============================== */}
 
                         <td className="px-5 py-4">
                           {campista.campamento ? (
@@ -717,9 +779,7 @@ export default function ListaCampistas({
                           )}
                         </td>
 
-                        {/* ============================== */}
                         {/* ESTADO PAGO */}
-                        {/* ============================== */}
 
                         <td className="px-5 py-4">
                           <EstadoPagoBadge
@@ -729,9 +789,7 @@ export default function ListaCampistas({
                           />
                         </td>
 
-                        {/* ============================== */}
                         {/* AHORRADO */}
-                        {/* ============================== */}
 
                         <td className="whitespace-nowrap px-5 py-4 text-right">
                           {campista.estado_pago ===
@@ -757,9 +815,7 @@ export default function ListaCampistas({
                           )}
                         </td>
 
-                        {/* ============================== */}
-                        {/* FALTA POR PAGAR */}
-                        {/* ============================== */}
+                        {/* FALTA */}
 
                         <td className="whitespace-nowrap px-5 py-4 text-right">
                           {campista.estado_pago ===
@@ -781,9 +837,7 @@ export default function ListaCampistas({
                           )}
                         </td>
 
-                        {/* ============================== */}
                         {/* ACCIÓN */}
-                        {/* ============================== */}
 
                         <td className="px-5 py-4 text-right">
                           <Link
@@ -801,10 +855,6 @@ export default function ListaCampistas({
             </table>
           </div>
         ) : (
-          /* ==================================================
-             SIN RESULTADOS
-          ================================================== */
-
           <div className="px-6 py-16 text-center">
             <p className="text-lg font-semibold text-slate-900">
               No encontramos
@@ -844,9 +894,7 @@ function EstadoPagoBadge({
 }: {
   estado: EstadoPago;
 }) {
-  if (
-    estado === "COMPLETO"
-  ) {
+  if (estado === "COMPLETO") {
     return (
       <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
         ✓ Pagado completo
@@ -854,9 +902,7 @@ function EstadoPagoBadge({
     );
   }
 
-  if (
-    estado === "PENDIENTE"
-  ) {
+  if (estado === "PENDIENTE") {
     return (
       <span className="inline-flex whitespace-nowrap rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
         Pendiente
@@ -885,20 +931,15 @@ function obtenerIglesia(
     return null;
   }
 
-  if (
-    Array.isArray(relacion)
-  ) {
-    return (
-      relacion[0] ||
-      null
-    );
+  if (Array.isArray(relacion)) {
+    return relacion[0] || null;
   }
 
   return relacion;
 }
 
 // ==========================================================
-// NORMALIZAR TEXTO
+// NORMALIZAR
 // ==========================================================
 
 function normalizar(
@@ -908,9 +949,7 @@ function normalizar(
     | null
     | undefined
 ) {
-  return String(
-    valor ?? ""
-  )
+  return String(valor ?? "")
     .toLowerCase()
     .normalize("NFD")
     .replace(
