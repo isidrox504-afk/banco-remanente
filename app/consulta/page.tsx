@@ -8,7 +8,6 @@ import {
 
 import Link from "next/link";
 import Image from "next/image";
-import { useSearchParams } from "next/navigation";
 
 import { APP_CONFIG } from "@/lib/config/app";
 
@@ -46,16 +45,15 @@ type ResultadoConsulta = {
 };
 
 export default function ConsultaPage() {
-  const searchParams =
-    useSearchParams();
-
-  const codigoDesdeUrl =
-    searchParams.get("codigo");
-
   const [
     codigoCampista,
     setCodigoCampista,
   ] = useState("");
+
+  const [
+    codigoCargadoDesdeUrl,
+    setCodigoCargadoDesdeUrl,
+  ] = useState(false);
 
   const [pin, setPin] =
     useState("");
@@ -98,16 +96,35 @@ export default function ConsultaPage() {
   // ============================================================
 
   useEffect(() => {
-    if (!codigoDesdeUrl) {
+    const params =
+      new URLSearchParams(
+        window.location.search
+      );
+
+    const codigo =
+      params.get("codigo");
+
+    if (!codigo) {
+      return;
+    }
+
+    const codigoLimpio =
+      codigo
+        .trim()
+        .toUpperCase();
+
+    if (!codigoLimpio) {
       return;
     }
 
     setCodigoCampista(
-      codigoDesdeUrl
-        .trim()
-        .toUpperCase()
+      codigoLimpio
     );
-  }, [codigoDesdeUrl]);
+
+    setCodigoCargadoDesdeUrl(
+      true
+    );
+  }, []);
 
   // ============================================================
   // CONSULTAR
@@ -388,6 +405,9 @@ export default function ConsultaPage() {
   function nuevaConsulta() {
     setResultado(null);
     setCodigoCampista("");
+    setCodigoCargadoDesdeUrl(
+      false
+    );
     setPin("");
     setError("");
     setMensajeActualizacion(
@@ -395,6 +415,12 @@ export default function ConsultaPage() {
     );
     setUltimaActualizacion(
       null
+    );
+
+    window.history.replaceState(
+      {},
+      "",
+      "/consulta"
     );
   }
 
@@ -406,16 +432,11 @@ export default function ConsultaPage() {
     return (
       <main className="min-h-screen bg-slate-50 px-6 py-10">
         <div className="mx-auto max-w-3xl">
-          {/* CABECERA */}
           <div className="mb-8 text-center">
             <div className="mb-4 flex justify-center">
               <Image
-                src={
-                  APP_CONFIG.logo
-                }
-                alt={
-                  APP_CONFIG.nombre
-                }
+                src={APP_CONFIG.logo}
+                alt={APP_CONFIG.nombre}
                 width={72}
                 height={72}
                 className="rounded-2xl object-contain"
@@ -423,9 +444,7 @@ export default function ConsultaPage() {
             </div>
 
             <p className="text-sm font-semibold uppercase tracking-wider text-emerald-600">
-              {
-                APP_CONFIG.nombre
-              }
+              {APP_CONFIG.nombre}
             </p>
 
             <h1 className="mt-2 text-3xl font-bold text-slate-900">
@@ -456,7 +475,6 @@ export default function ConsultaPage() {
             </div>
           </div>
 
-          {/* ACTUALIZACIÓN */}
           <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -505,7 +523,6 @@ export default function ConsultaPage() {
             )}
           </div>
 
-          {/* SIN INSCRIPCIÓN */}
           {!resultado.inscripcion ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center shadow-sm">
               <h2 className="text-xl font-semibold text-amber-900">
@@ -524,7 +541,6 @@ export default function ConsultaPage() {
             </div>
           ) : (
             <>
-              {/* AHORRO */}
               <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
@@ -559,7 +575,6 @@ export default function ConsultaPage() {
                   </span>
                 </div>
 
-                {/* RESUMEN */}
                 <div className="mt-8 grid gap-4 sm:grid-cols-3">
                   <Resumen
                     titulo="Meta"
@@ -590,7 +605,6 @@ export default function ConsultaPage() {
                   />
                 </div>
 
-                {/* PROGRESO */}
                 <div className="mt-8">
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-sm font-medium text-slate-600">
@@ -623,7 +637,6 @@ export default function ConsultaPage() {
                   </div>
                 </div>
 
-                {/* FECHA LÍMITE */}
                 {resultado
                   .inscripcion
                   .campamento
@@ -646,7 +659,6 @@ export default function ConsultaPage() {
                 )}
               </div>
 
-              {/* APORTES */}
               <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
                 <h2 className="text-lg font-semibold text-slate-900">
                   Historial de
@@ -678,13 +690,9 @@ export default function ConsultaPage() {
                 ) : (
                   <div className="mt-6 divide-y divide-slate-100">
                     {resultado.aportes.map(
-                      (
-                        aporte
-                      ) => (
+                      (aporte) => (
                         <div
-                          key={
-                            aporte.id
-                          }
+                          key={aporte.id}
                           className="flex items-center justify-between gap-4 py-4"
                         >
                           <div>
@@ -725,7 +733,6 @@ export default function ConsultaPage() {
             </>
           )}
 
-          {/* NUEVA CONSULTA */}
           <div className="mt-6 flex justify-center">
             <button
               type="button"
@@ -749,7 +756,6 @@ export default function ConsultaPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      {/* HEADER */}
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <Link
@@ -757,12 +763,8 @@ export default function ConsultaPage() {
             className="flex items-center gap-3"
           >
             <Image
-              src={
-                APP_CONFIG.logo
-              }
-              alt={
-                APP_CONFIG.nombre
-              }
+              src={APP_CONFIG.logo}
+              alt={APP_CONFIG.nombre}
               width={48}
               height={48}
               className="rounded-xl object-contain"
@@ -770,9 +772,7 @@ export default function ConsultaPage() {
 
             <div>
               <p className="font-bold text-slate-900">
-                {
-                  APP_CONFIG.nombre
-                }
+                {APP_CONFIG.nombre}
               </p>
 
               <p className="text-xs text-slate-500">
@@ -792,7 +792,6 @@ export default function ConsultaPage() {
         </div>
       </header>
 
-      {/* CONTENIDO */}
       <section className="mx-auto flex max-w-6xl flex-col items-center px-6 py-16 sm:py-20">
         <div className="w-full max-w-xl text-center">
           <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-emerald-600">
@@ -814,7 +813,6 @@ export default function ConsultaPage() {
           </p>
         </div>
 
-        {/* FORMULARIO */}
         <div className="mt-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <form
             onSubmit={
@@ -823,7 +821,6 @@ export default function ConsultaPage() {
             className="space-y-6"
             autoComplete="off"
           >
-            {/* CAMPOS PARA EVITAR AUTOFILL */}
             <input
               type="text"
               name="fake-email"
@@ -842,7 +839,6 @@ export default function ConsultaPage() {
               className="absolute -left-[9999px] h-0 w-0 opacity-0"
             />
 
-            {/* CÓDIGO CAMPISTA */}
             <div>
               <label
                 htmlFor="codigo-campista"
@@ -858,12 +854,16 @@ export default function ConsultaPage() {
                 value={
                   codigoCampista
                 }
-                onChange={(e) =>
+                onChange={(e) => {
                   setCodigoCampista(
                     e.target.value
                       .toUpperCase()
-                  )
-                }
+                  );
+
+                  setCodigoCargadoDesdeUrl(
+                    false
+                  );
+                }}
                 required
                 autoComplete="off"
                 spellCheck={false}
@@ -872,13 +872,12 @@ export default function ConsultaPage() {
               />
 
               <p className="mt-2 text-xs text-slate-400">
-                {codigoDesdeUrl
+                {codigoCargadoDesdeUrl
                   ? "Tu código fue cargado automáticamente desde el enlace."
                   : "Ejemplo: CAM-000158"}
               </p>
             </div>
 
-            {/* PIN */}
             <div>
               <label
                 htmlFor="pin-consulta"
@@ -921,14 +920,12 @@ export default function ConsultaPage() {
               </p>
             </div>
 
-            {/* ERROR */}
             {error && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                 {error}
               </div>
             )}
 
-            {/* BOTÓN */}
             <button
               type="submit"
               disabled={
@@ -1049,17 +1046,11 @@ function formatearMetodo(
     string,
     string
   > = {
-    EFECTIVO:
-      "Efectivo",
-
+    EFECTIVO: "Efectivo",
     TRANSFERENCIA:
       "Transferencia",
-
-    DEPOSITO:
-      "Depósito",
-
-    OTRO:
-      "Otro",
+    DEPOSITO: "Depósito",
+    OTRO: "Otro",
   };
 
   return (
