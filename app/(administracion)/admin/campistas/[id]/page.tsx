@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import BotonEstado from "./BotonEstado";
 import BotonEliminarCampista from "./BotonEliminarCampista";
+import ReenviarCredencialesWhatsApp from "./ReenviarCredencialesWhatsApp";
 
 export default async function DetalleCampistaPage({
   params,
@@ -28,6 +29,7 @@ export default async function DetalleCampistaPage({
       identidad,
       nombre,
       telefono,
+      pin_consulta,
       genero,
       fecha_nacimiento,
       estado,
@@ -627,12 +629,31 @@ export default async function DetalleCampistaPage({
               </p>
             </div>
 
+            {/* GENERAR NUEVO PIN */}
+
             <Link
               href={`/admin/campistas/${campista.id}/pin`}
               className="mt-5 block w-full rounded-xl border border-slate-300 px-4 py-3 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
               Generar nuevo PIN
             </Link>
+
+            {/* REENVIAR CREDENCIALES */}
+
+            <ReenviarCredencialesWhatsApp
+              nombre={
+                campista.nombre
+              }
+              telefono={
+                campista.telefono
+              }
+              codigoCampista={
+                campista.codigo_campista
+              }
+              pin={
+                campista.pin_consulta
+              }
+            />
           </div>
 
           {/* ================================================== */}
