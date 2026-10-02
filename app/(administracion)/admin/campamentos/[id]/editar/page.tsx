@@ -1,3 +1,4 @@
+
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
@@ -14,65 +15,145 @@ type Campamento = {
   estado: string;
 };
 
+type Iglesia = {
+  id: number;
+  nombre: string;
+  estado: string;
+};
+
+type PrecioIglesia = {
+  iglesia_id: number;
+  precio: string;
+};
+
 export default function EditarCampamentoPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-
   const id = params.id;
 
   const [nombre, setNombre] = useState("");
   const [precio, setPrecio] = useState("");
   const [fechaInicio, setFechaInicio] = useState("");
-  const [fechaLimitePago, setFechaLimitePago] =
-    useState("");
+  const [fechaLimitePago, setFechaLimitePago] = useState("");
+
+  const [iglesias, setIglesias] = useState<Iglesia[]>([]);
+  const [preciosIglesia, setPreciosIglesia] = useState<
+    Record<number, string>
+  >({});
 
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    let cancelado = false;
+
     async function cargarCampamento() {
+      setCargando(true);
+      setError("");
+
       const supabase = createClient();
 
-      const { data, error } = await supabase
-        .from("campamentos")
-        .select(`
-          id,
-          nombre,
-          precio_inscripcion,
-          fecha_inicio,
-          fecha_limite_pago,
-          estado
-        `)
-        .eq("id", id)
-        .single<Campamento>();
+      const [
+        { data: campamento, error: errorCampamento },
+        { data: iglesiasData, error: errorIglesias },
+      ] = await Promise.all([
+        supabase
+          .from("campamentos")
+          .select(`
+            id,
+            nombre,
+            precio_inscripcion,
+            fecha_inicio,
+            fecha_limite_pago,
+            estado
+          `)
+          .eq("id", id)
+          .single<Campamento>(),
 
-      if (error || !data) {
+        supabase
+          .from("iglesias")
+          .select("id, nombre, estado")
+          .eq("estado", "ACTIVO")
+          .order("nombre"),
+      ]);
+
+      if (cancelado) return;
+
+      if (errorCampamento || !campamento) {
         setError("No se pudo cargar el campamento.");
         setCargando(false);
         return;
       }
 
-      setNombre(data.nombre);
-      setPrecio(String(data.precio_inscripcion));
-      setFechaInicio(data.fecha_inicio || "");
-      setFechaLimitePago(
-        data.fecha_limite_pago || ""
-      );
+      if (errorIglesias) {
+        setError("No se pudieron cargar las iglesias activas.");
+        setCargando(false);
+        return;
+      }
 
+      const { data: preciosGuardados, error: errorPrecios } =
+        await supabase
+          .from("precios_campamento_iglesia")
+          .select("iglesia_id, precio")
+          .eq("campamento_id", campamento.id);
+
+      if (cancelado) return;
+
+     if (errorPrecios) {
+  console.error("Error al cargar precios por iglesia:", errorPrecios);
+  setError(
+    `Error al cargar precios: ${errorPrecios.message}`
+  );
+  setCargando(false);
+  return;
+}
+
+      const preciosIniciales: Record<number, string> = {};
+
+      for (const iglesia of iglesiasData ?? []) {
+        const precioExistente = (preciosGuardados ?? []).find(
+          (item) => Number(item.iglesia_id) === Number(iglesia.id)
+        );
+
+        preciosIniciales[Number(iglesia.id)] =
+          precioExistente != null
+            ? String(precioExistente.precio)
+            : "";
+      }
+
+      setNombre(campamento.nombre);
+      setPrecio(String(campamento.precio_inscripcion));
+      setFechaInicio(campamento.fecha_inicio || "");
+      setFechaLimitePago(campamento.fecha_limite_pago || "");
+      setIglesias((iglesiasData ?? []) as Iglesia[]);
+      setPreciosIglesia(preciosIniciales);
       setCargando(false);
     }
 
     if (id) {
       cargarCampamento();
     }
+
+    return () => {
+      cancelado = true;
+    };
   }, [id]);
+
+  function actualizarPrecioIglesia(
+    iglesiaId: number,
+    nuevoPrecio: string
+  ) {
+    setPreciosIglesia((actuales) => ({
+      ...actuales,
+      [iglesiaId]: nuevoPrecio,
+    }));
+  }
 
   async function guardarCambios(
     e: FormEvent<HTMLFormElement>
   ) {
     e.preventDefault();
-
     setError("");
 
     if (!nombre.trim()) {
@@ -80,10 +161,14 @@ export default function EditarCampamentoPage() {
       return;
     }
 
-    if (!precio || Number(precio) <= 0) {
-      setError(
-        "Ingresa un precio de inscripción válido."
-      );
+    const precioGeneral = Number(precio);
+
+    if (
+      !precio.trim() ||
+      !Number.isFinite(precioGeneral) ||
+      precioGeneral <= 0
+    ) {
+      setError("Ingresa un precio de inscripción válido.");
       return;
     }
 
@@ -98,25 +183,52 @@ export default function EditarCampamentoPage() {
       return;
     }
 
+    const preciosParaGuardar: PrecioIglesia[] = [];
+
+    for (const iglesia of iglesias) {
+      const valor = preciosIglesia[Number(iglesia.id)] ?? "";
+
+      // Un campo vacío significa que esta iglesia no tendrá
+      // un precio especial configurado.
+      if (!valor.trim()) continue;
+
+      const precioIglesia = Number(valor);
+
+      if (
+        !Number.isFinite(precioIglesia) ||
+        precioIglesia < 0
+      ) {
+        setError(
+          `Ingresa un precio válido para la iglesia ${iglesia.nombre}.`
+        );
+        return;
+      }
+
+      preciosParaGuardar.push({
+        iglesia_id: Number(iglesia.id),
+        precio: String(precioIglesia),
+      });
+    }
+
     setGuardando(true);
 
     try {
-      const response = await fetch(
-        `/api/campamentos/${id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            nombre: nombre.trim(),
-            precio_inscripcion: Number(precio),
-            fecha_inicio: fechaInicio || null,
-            fecha_limite_pago:
-              fechaLimitePago || null,
-          }),
-        }
-      );
+      const response = await fetch(`/api/campamentos/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          nombre: nombre.trim(),
+          precio_inscripcion: precioGeneral,
+          fecha_inicio: fechaInicio || null,
+          fecha_limite_pago: fechaLimitePago || null,
+          precios_iglesia: preciosParaGuardar.map((item) => ({
+            iglesia_id: item.iglesia_id,
+            precio: Number(item.precio),
+          })),
+        }),
+      });
 
       const resultado = await response.json();
 
@@ -162,15 +274,13 @@ export default function EditarCampamentoPage() {
         </h1>
 
         <p className="mt-2 text-slate-500">
-          Actualiza la configuración del campamento.
+          Actualiza los datos generales y configura los precios
+          especiales por iglesia.
         </p>
       </div>
 
-      <div className="max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <form
-          onSubmit={guardarCambios}
-          className="space-y-6"
-        >
+      <div className="max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <form onSubmit={guardarCambios} className="space-y-6">
           <div>
             <label className="mb-2 block text-sm font-semibold text-slate-700">
               Nombre del campamento *
@@ -179,9 +289,7 @@ export default function EditarCampamentoPage() {
             <input
               type="text"
               value={nombre}
-              onChange={(e) =>
-                setNombre(e.target.value)
-              }
+              onChange={(e) => setNombre(e.target.value)}
               required
               className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
             />
@@ -189,7 +297,7 @@ export default function EditarCampamentoPage() {
 
           <div>
             <label className="mb-2 block text-sm font-semibold text-slate-700">
-              Precio de inscripción *
+              Precio general de inscripción *
             </label>
 
             <div className="relative">
@@ -202,17 +310,17 @@ export default function EditarCampamentoPage() {
                 min="0.01"
                 step="0.01"
                 value={precio}
-                onChange={(e) =>
-                  setPrecio(e.target.value)
-                }
+                onChange={(e) => setPrecio(e.target.value)}
                 required
                 className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-9 pr-4 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               />
             </div>
 
             <p className="mt-2 text-xs text-slate-500">
-              Cambiar este precio no modifica automáticamente
-              las metas de las personas que ya están inscritas.
+              Este es el precio general. Configura abajo un precio
+              diferente únicamente para las iglesias que lo necesiten.
+              Los cambios no modifican las metas históricas de las
+              personas inscritas.
             </p>
           </div>
 
@@ -225,9 +333,7 @@ export default function EditarCampamentoPage() {
               <input
                 type="date"
                 value={fechaInicio}
-                onChange={(e) =>
-                  setFechaInicio(e.target.value)
-                }
+                onChange={(e) => setFechaInicio(e.target.value)}
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               />
             </div>
@@ -240,12 +346,75 @@ export default function EditarCampamentoPage() {
               <input
                 type="date"
                 value={fechaLimitePago}
-                onChange={(e) =>
-                  setFechaLimitePago(e.target.value)
-                }
+                onChange={(e) => setFechaLimitePago(e.target.value)}
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               />
             </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-6">
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-slate-900">
+                Precios por iglesia
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Deja el campo vacío si la iglesia utilizará el precio
+                general. Solo se muestran iglesias activas.
+              </p>
+            </div>
+
+            {iglesias.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                No hay iglesias activas para configurar.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {iglesias.map((iglesia) => (
+                  <div
+                    key={iglesia.id}
+                    className="grid gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-[1fr_200px] sm:items-center"
+                  >
+                    <div>
+                      <p className="font-semibold text-slate-800">
+                        {iglesia.nombre}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        ID: {iglesia.id}
+                      </p>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor={`precio-iglesia-${iglesia.id}`}
+                        className="mb-1 block text-xs font-medium text-slate-600"
+                      >
+                        Precio especial (L)
+                      </label>
+
+                      <input
+                        id={`precio-iglesia-${iglesia.id}`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputMode="decimal"
+                        placeholder={`General: L ${precio || "0.00"}`}
+                        value={
+                          preciosIglesia[Number(iglesia.id)] ?? ""
+                        }
+                        onChange={(e) =>
+                          actualizarPrecioIglesia(
+                            Number(iglesia.id),
+                            e.target.value
+                          )
+                        }
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {error && (
@@ -267,9 +436,7 @@ export default function EditarCampamentoPage() {
               disabled={guardando}
               className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {guardando
-                ? "Guardando..."
-                : "Guardar cambios"}
+              {guardando ? "Guardando..." : "Guardar cambios"}
             </button>
           </div>
         </form>

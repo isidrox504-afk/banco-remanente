@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 // EDITAR CAMPAMENTO
 // ============================================================
 
+
 export async function PUT(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -25,16 +26,35 @@ export async function PUT(
       );
     }
 
+    if (!/^\d+$/.test(id) || Number(id) <= 0) {
+      return NextResponse.json(
+        { error: "El identificador del campamento no es válido." },
+        { status: 400 }
+      );
+    }
+
     const body = await request.json();
 
-    const nombre = body.nombre?.trim();
+    const nombre =
+      typeof body.nombre === "string"
+        ? body.nombre.trim()
+        : "";
+
     const precio = Number(body.precio_inscripcion);
 
     const fechaInicio =
-      body.fecha_inicio?.trim() || null;
+      typeof body.fecha_inicio === "string" &&
+      body.fecha_inicio.trim()
+        ? body.fecha_inicio.trim()
+        : null;
 
     const fechaLimitePago =
-      body.fecha_limite_pago?.trim() || null;
+      typeof body.fecha_limite_pago === "string" &&
+      body.fecha_limite_pago.trim()
+        ? body.fecha_limite_pago.trim()
+        : null;
+
+    const preciosIglesia = body.precios_iglesia;
 
     if (!nombre) {
       return NextResponse.json(
@@ -64,28 +84,73 @@ export async function PUT(
       );
     }
 
-    const { data, error } = await supabase
-      .from("campamentos")
-      .update({
-        nombre,
-        precio_inscripcion: precio,
-        fecha_inicio: fechaInicio,
-        fecha_limite_pago: fechaLimitePago,
-      })
-      .eq("id", id)
-      .select(`
-        id,
-        nombre,
-        precio_inscripcion,
-        fecha_inicio,
-        fecha_limite_pago,
-        estado
-      `)
-      .single();
+    if (!Array.isArray(preciosIglesia)) {
+      return NextResponse.json(
+        {
+          error:
+            "Debes enviar la lista de precios por iglesia.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const iglesiasProcesadas = new Set<number>();
+
+    for (const item of preciosIglesia) {
+      const iglesiaId = Number(item?.iglesia_id);
+      const precioIglesia = Number(item?.precio);
+
+      if (
+        !Number.isInteger(iglesiaId) ||
+        iglesiaId <= 0 ||
+        !Number.isFinite(precioIglesia) ||
+        precioIglesia < 0
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Hay un precio por iglesia o identificador no válido.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (iglesiasProcesadas.has(iglesiaId)) {
+        return NextResponse.json(
+          {
+            error:
+              "No puedes enviar una iglesia más de una vez.",
+          },
+          { status: 400 }
+        );
+      }
+
+      iglesiasProcesadas.add(iglesiaId);
+    }
+
+    const { data, error } = await supabase.rpc(
+      "actualizar_campamento_con_precios",
+      {
+        p_campamento_id: Number(id),
+        p_nombre: nombre,
+        p_precio_inscripcion: precio,
+        p_fecha_inicio: fechaInicio,
+        p_fecha_limite_pago: fechaLimitePago,
+        p_precios_iglesia: preciosIglesia,
+      }
+    );
 
     if (error) {
+      console.error(
+        "Error al actualizar campamento con precios:",
+        error
+      );
+
       return NextResponse.json(
-        { error: error.message },
+        {
+          error:
+            "No se pudo actualizar el campamento y sus precios por iglesia.",
+        },
         { status: 500 }
       );
     }
@@ -93,9 +158,14 @@ export async function PUT(
     return NextResponse.json({
       campamento: data,
     });
-  } catch {
+  } catch (error) {
+    console.error("Error inesperado al actualizar campamento:", error);
+
     return NextResponse.json(
-      { error: "Ocurrió un error al actualizar el campamento." },
+      {
+        error:
+          "Ocurrió un error al actualizar el campamento.",
+      },
       { status: 500 }
     );
   }

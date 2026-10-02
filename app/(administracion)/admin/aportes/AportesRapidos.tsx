@@ -65,6 +65,15 @@ export default function AportesRapidos() {
   const [error, setError] = useState("");
   const [mensaje, setMensaje] = useState("");
 
+  // Controla la ventana de confirmación antes de guardar el aporte.
+  const [confirmarAporte, setConfirmarAporte] = useState(false);
+
+  // Guarda los datos que se mostrarán en la ventana de éxito.
+  const [aporteExitoso, setAporteExitoso] = useState<{
+    monto: number;
+    campista: string;
+  } | null>(null);
+
   /*
    * Guardamos la petición activa.
    *
@@ -268,7 +277,8 @@ export default function AportesRapidos() {
   // REGISTRAR APORTE
   // ==========================================================
 
-  async function registrarAporte(
+  // Valida los datos y abre la confirmación sin guardar todavía.
+  function solicitarConfirmacionAporte(
     e: FormEvent<HTMLFormElement>
   ) {
     e.preventDefault();
@@ -277,47 +287,64 @@ export default function AportesRapidos() {
     setMensaje("");
 
     if (!campistaSeleccionado) {
-      setError(
-        "Debe seleccionar un campista."
-      );
-
+      setError("Debe seleccionar un campista.");
       return;
     }
 
     if (!campistaSeleccionado.inscripcion) {
-      setError(
-        "El campista no tiene una inscripción activa."
-      );
-
+      setError("El campista no tiene una inscripción activa.");
       return;
     }
 
     const montoNumerico = Number(monto);
 
-    if (
-      !Number.isFinite(montoNumerico) ||
-      montoNumerico <= 0
-    ) {
-      setError(
-        "Ingrese un monto válido mayor que cero."
-      );
-
+    if (!Number.isFinite(montoNumerico) || montoNumerico <= 0) {
+      setError("Ingrese un monto válido mayor que cero.");
       return;
     }
 
     if (
-      metodoPago === "TRANSFERENCIA" &&
-      !bancoTransferencia
+      montoNumerico > campistaSeleccionado.inscripcion.pendiente
     ) {
-      setError(
-        "Debe seleccionar el banco de la transferencia."
-      );
+      setError("El aporte no puede ser mayor al monto pendiente.");
+      return;
+    }
 
+    if (metodoPago === "TRANSFERENCIA" && !bancoTransferencia) {
+      setError("Debe seleccionar el banco de la transferencia.");
+      return;
+    }
+
+    // Solo mostramos la ventana; el registro ocurre al confirmar.
+    setConfirmarAporte(true);
+  }
+
+  // Ejecuta el registro después de que el usuario confirma.
+  async function registrarAporte() {
+    if (!campistaSeleccionado?.inscripcion) {
+      setError("Debe seleccionar un campista con inscripción activa.");
+      setConfirmarAporte(false);
+      return;
+    }
+
+    const montoNumerico = Number(monto);
+
+    // Revalidamos antes de enviar la solicitud a la API.
+    if (
+      !Number.isFinite(montoNumerico) ||
+      montoNumerico <= 0 ||
+      montoNumerico > campistaSeleccionado.inscripcion.pendiente
+    ) {
+      setError("Ingrese un monto válido que no supere el saldo pendiente.");
+      setConfirmarAporte(false);
       return;
     }
 
     try {
       setGuardando(true);
+      setError("");
+      setMensaje("");
+      setConfirmarAporte(false);
 
       const response = await fetch(
         "/api/aportes",
@@ -389,9 +416,12 @@ export default function AportesRapidos() {
       setObservacion("");
       setBancoTransferencia("");
 
-      setMensaje(
-        `Aporte registrado correctamente para ${campistaSeleccionado.nombre}.`
-      );
+      // Mostramos el éxito únicamente después de confirmar la respuesta de la API.
+      setMensaje("");
+      setAporteExitoso({
+        monto: montoNumerico,
+        campista: campistaSeleccionado.nombre,
+      });
     } catch {
       setError(
         "Ocurrió un error al registrar el aporte."
@@ -732,7 +762,7 @@ export default function AportesRapidos() {
             )}
 
             <form
-              onSubmit={registrarAporte}
+              onSubmit={solicitarConfirmacionAporte}
               className="mt-6 space-y-5"
             >
               {/* MONTO */}
@@ -944,6 +974,206 @@ export default function AportesRapidos() {
           </div>
         </div>
       </div>
+
+      {/* ======================================================
+          MODAL DE CONFIRMACIÓN DEL APORTE
+          El usuario puede cancelar o confirmar antes de guardar.
+      ====================================================== */}
+      {confirmarAporte && campistaSeleccionado && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-confirmar-aporte"
+        >
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="h-8 w-8 text-amber-600"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 9v3.75m9-0.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 4.5h.008v.008H12V16.5Z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h2
+                  id="titulo-confirmar-aporte"
+                  className="text-xl font-bold text-slate-900"
+                >
+                  ¿Confirmar aporte?
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Revisa los datos antes de continuar.
+                </p>
+              </div>
+            </div>
+
+            {/* Resumen de los datos que se van a registrar. */}
+            <div className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Campista
+                </p>
+                <p className="mt-1 font-semibold text-slate-900">
+                  {campistaSeleccionado.nombre}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Monto del aporte
+                </p>
+                <p className="mt-1 text-3xl font-bold text-emerald-700">
+                  L{" "}
+                  {Number(monto).toLocaleString("es-HN", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-3">
+                <span className="text-sm text-slate-500">
+                  Método de pago
+                </span>
+                <span className="text-sm font-semibold text-slate-800">
+                  {metodoPago === "EFECTIVO"
+                    ? "Efectivo"
+                    : metodoPago === "TRANSFERENCIA"
+                      ? `Transferencia${bancoTransferencia ? ` - ${bancoTransferencia}` : ""}`
+                      : metodoPago === "DEPOSITO"
+                        ? "Depósito"
+                        : "Otro"}
+                </span>
+              </div>
+
+              {referencia.trim() && (
+                <div className="flex items-start justify-between gap-3 border-t border-slate-200 pt-3">
+                  <span className="text-sm text-slate-500">
+                    Referencia
+                  </span>
+                  <span className="break-all text-right text-sm font-medium text-slate-800">
+                    {referencia}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <p className="mt-4 text-center text-sm text-slate-600">
+              ¿Estás seguro de que deseas registrar este aporte?
+            </p>
+
+            {/* Acciones para cancelar o proceder con el registro. */}
+            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setConfirmarAporte(false)}
+                disabled={guardando}
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void registrarAporte()}
+                disabled={guardando}
+                className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {guardando ? "Registrando..." : "Sí, registrar aporte"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================
+          MODAL DE REGISTRO EXITOSO
+          Solo aparece si la API confirma que el aporte se guardó.
+      ====================================================== */}
+      {aporteExitoso && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-aporte-exitoso"
+        >
+          <div className="w-full max-w-md rounded-3xl bg-white p-7 shadow-2xl sm:p-8">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="h-11 w-11 text-emerald-600"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m5 12 4 4L19 6"
+                  />
+                </svg>
+              </div>
+
+              <h2
+                id="titulo-aporte-exitoso"
+                className="mt-5 text-2xl font-bold text-slate-900"
+              >
+                ¡Aporte registrado!
+              </h2>
+
+              <p className="mt-2 text-sm text-slate-500">
+                El aporte se ha guardado correctamente.
+              </p>
+            </div>
+
+            {/* Presenta el monto confirmado y el campista asociado. */}
+            <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-center">
+              <p className="text-sm font-medium text-emerald-700">
+                Monto registrado
+              </p>
+
+              <p className="mt-2 text-3xl font-bold text-emerald-700">
+                L{" "}
+                {aporteExitoso.monto.toLocaleString("es-HN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </p>
+
+              <div className="mt-4 border-t border-emerald-200 pt-4">
+                <p className="text-xs text-emerald-600">
+                  Campista
+                </p>
+                <p className="mt-1 font-semibold text-emerald-900">
+                  {aporteExitoso.campista}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setAporteExitoso(null)}
+              className="mt-6 w-full rounded-xl bg-emerald-600 px-5 py-3.5 font-semibold text-white transition hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-200"
+            >
+              Aceptar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
