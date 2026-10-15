@@ -103,6 +103,11 @@ export default async function ReportesPage({
     `)
     .order("nombre");
 
+  const { data: campamentos } = await supabase
+      .from("campamentos")
+      .select("id, nombre, estado")
+      .order("nombre");
+
   /*
    * CARGAR CAMPISTAS
    *
@@ -442,6 +447,22 @@ export default async function ReportesPage({
       ? `/api/reportes/campistas/pdf?${pdfParams.toString()}`
       : "/api/reportes/campistas/pdf";
 
+  // ============================================================
+// URLS PARA EXPORTAR EXCEL
+// ============================================================
+
+    const excelParams = new URLSearchParams(
+      pdfParams.toString()
+    );
+
+    excelParams.set("alcance", "filtrados");
+
+    const excelFiltradosUrl =
+      `/api/reportes/campistas/excel?${excelParams.toString()}`;
+
+    const excelTodosUrl =
+      "/api/reportes/campistas/excel?alcance=todos";
+
   return (
     <>
       {/* ENCABEZADO */}
@@ -722,9 +743,171 @@ export default async function ReportesPage({
             >
               Generar PDF
             </a>
+            {/* EXPORTAR TODOS LOS CAMPISTAS */}
+              <a
+                href={excelTodosUrl}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800"
+              >
+                <span aria-hidden="true">📊</span>
+                Exportar todo a Excel
+              </a>
+
+              {/* EXPORTAR SEGÚN LOS FILTROS */}
+              <a
+                href={excelFiltradosUrl}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-6 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50"
+              >
+                <span aria-hidden="true">📄</span>
+                Exportar filtrados
+              </a>
           </div>
         </form>
       </div>
+
+      {/* LISTA DE ASISTENCIA PDF */}
+      <section className="mb-8 rounded-2xl border border-sky-200 bg-white p-6 shadow-sm">
+        <div className="mb-5">
+          <p className="text-sm font-semibold uppercase tracking-wide text-sky-700">
+            Asistencia
+          </p>
+          <h2 className="mt-1 text-xl font-bold text-slate-900">
+            Lista de asistencia
+          </h2>
+          <p className="mt-2 text-sm text-slate-500">
+            Genera una lista PDF combinando un campamento y una iglesia.
+            Incluye casillas para marcar presente o ausente.
+          </p>
+        </div>
+
+        <form
+          action="/api/reportes/asistencia/pdf"
+          method="GET"
+          target="_blank"
+          className="grid gap-4 md:grid-cols-3"
+        >
+          <div>
+            <label
+              htmlFor="campamento-asistencia"
+              className="mb-2 block text-sm font-semibold text-slate-700"
+            >
+              Campamento
+            </label>
+            <select
+              id="campamento-asistencia"
+              name="campamento"
+              required
+              defaultValue=""
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+            >
+              <option value="" disabled>
+                Selecciona un campamento
+              </option>
+              {(campamentos || []).map((campamento) => (
+                <option key={campamento.id} value={campamento.id}>
+                  {campamento.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="iglesia-asistencia"
+              className="mb-2 block text-sm font-semibold text-slate-700"
+            >
+              Iglesia
+            </label>
+            <select
+              id="iglesia-asistencia"
+              name="iglesia"
+              required
+              defaultValue=""
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+            >
+              <option value="" disabled>
+                Selecciona una iglesia
+              </option>
+              {(iglesias || []).map((iglesiaItem) => (
+                <option key={iglesiaItem.id} value={iglesiaItem.id}>
+                  {iglesiaItem.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-end">
+            <button
+              type="submit"
+              className="w-full rounded-xl bg-sky-700 px-6 py-3 text-sm font-semibold text-white transition hover:bg-sky-800"
+            >
+              Generar lista de asistencia PDF
+            </button>
+          </div>
+        </form>
+      </section>
+
+      {/* LISTA GENERAL DE ASISTENCIA PDF */}
+      <section className="mb-8 rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm">
+        <div className="mb-5">
+          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
+            Asistencia general
+          </p>
+
+          <h2 className="mt-1 text-xl font-bold text-slate-900">
+            Lista general del campamento
+          </h2>
+
+          <p className="mt-2 text-sm text-slate-500">
+            Incluye a todos los campistas inscritos en el campamento,
+            independientemente de su iglesia. Se excluyen las inscripciones
+            canceladas.
+          </p>
+        </div>
+
+        <form
+          action="/api/reportes/asistencia/pdf"
+          method="GET"
+          target="_blank"
+          className="flex flex-col gap-4 sm:flex-row sm:items-end"
+        >
+          <div className="flex-1">
+            <label
+              htmlFor="campamento-asistencia-general"
+              className="mb-2 block text-sm font-semibold text-slate-700"
+            >
+              Campamento
+            </label>
+
+            <select
+              id="campamento-asistencia-general"
+              name="campamento"
+              required
+              defaultValue=""
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            >
+              <option value="" disabled>
+                Selecciona un campamento
+              </option>
+
+              {(campamentos || []).map((campamento) => (
+                <option
+                  key={campamento.id}
+                  value={campamento.id}
+                >
+                  {campamento.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+          >
+            Generar lista general PDF
+          </button>
+        </form>
+      </section>
 
       {/* ERROR */}
       {error && (
